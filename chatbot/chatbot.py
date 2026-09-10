@@ -228,6 +228,54 @@ def _stream_ollama(prompt: str):
     return morceaux()
 
 
+# Ordinaux français utilisés pour désigner un article par sa position plutôt que par son
+# titre ("le premier article", "le second article"...) -- interdit depuis l'origine du
+# prompt (PROMPT_CONTEXTE) mais contourné par le LLM de temps à autre en usage réel
+# (2026-09-10). Index = position dans `sources` (même ordre que dans _intro_articles /
+# _format_contexte).
+_ORDINAUX_ARTICLE = {
+    "premier": 0, "premiere": 0, "première": 0,
+    "deuxieme": 1, "deuxième": 1, "second": 1, "seconde": 1,
+    "troisieme": 2, "troisième": 2,
+    "quatrieme": 3, "quatrième": 3,
+}
+_REF_ORDINALE_RE = re.compile(
+    r"\ble\s+(premi[eè]re?|deuxi[eè]me|second[e]?|troisi[eè]me|quatri[eè]me)\s+articles?\b",
+    re.IGNORECASE,
+)
+
+
+def corriger_references_ordinales(texte: str, sources: list[str]) -> str:
+    """Remplace après coup "le premier/second/troisième article" par son vrai titre
+    entre guillemets, dans l'ordre où les articles ont été présentés au LLM (même
+    ordre que `sources`).
+
+    Constaté en usage réel (2026-09-10, retour biologiste) : PROMPT_CONTEXTE
+    interdit explicitement de citer un article par sa position depuis son origine,
+    mais mistral 7B contourne parfois cette règle malgré tout. Renforcer encore la
+    consigne risquerait de déstabiliser d'autres sections (voir
+    chatbot_prompt_fragility en mémoire projet -- le prompt est déjà considéré à
+    son plafond de complexité sûre) -- corrigé après coup en code pur à la place,
+    sur le même principe que detecter_citations_suspectes ci-dessous : aucune
+    modification du prompt ni du contexte, donc aucun risque de régression sur les
+    sections numériques.
+
+    Si l'index déduit dépasse le nombre de sources réelles (ex: "le quatrième
+    article" alors qu'il n'y en a que 3), la référence est laissée telle quelle
+    plutôt que de risquer un remplacement incorrect.
+    """
+    def _remplacement(m: re.Match) -> str:
+        idx = _ORDINAUX_ARTICLE.get(m.group(1).lower())
+        if idx is None or idx >= len(sources):
+            return m.group(0)
+        remplacement = f"l'article « {sources[idx]} »"
+        if m.group(0)[0].isupper():
+            remplacement = remplacement[0].upper() + remplacement[1:]
+        return remplacement
+
+    return _REF_ORDINALE_RE.sub(_remplacement, texte)
+
+
 # Repère les citations entre guillemets (français « » ou droits/courbes "..."/"...")
 # assez longues pour être un titre d'article plutôt qu'un mot mis en emphase.
 _CITATION_RE = re.compile(r"[«\"“]([^»\"”]{15,300})[»\"”]")

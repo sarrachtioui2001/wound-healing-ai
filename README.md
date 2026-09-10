@@ -614,6 +614,20 @@ fabriqué exact observé). Câblée dans `app.py` : un avertissement s'affiche s
 chaque fois qu'une citation ne correspond à aucune d'elles, pour le résumé de cinétique comme
 pour le chat. Ce n'est qu'un **détecteur** — il rend le problème visible, il ne l'empêche pas.
 
+**Citation par position ("le premier article") — corrigée après coup, même principe.** Constaté
+en usage réel (2026-09-10) : bien que `PROMPT_CONTEXTE` interdise explicitement de citer un
+article par sa position depuis l'origine, mistral 7B écrit parfois "le premier article établit...
+le second article décrit..." au lieu des titres réels — contourne la règle sans jamais inventer de
+contenu. Renforcer encore cette consigne a été jugé trop risqué (voir "at or past its safe
+complexity ceiling" ci-dessus) : `corriger_references_ordinales(texte, sources)` remplace ces
+tournures après coup par le vrai titre entre guillemets, à la position correspondante dans
+`sources` — aucune modification du prompt, donc aucun test d'isolation nécessaire, comme pour le
+détecteur de citations. Câblée dans `app.py` avant l'affichage et avant la détection de citations
+suspectes. Validée par
+[tests/test_chatbot_citations.py](tests/test_chatbot_citations.py) (5 cas supplémentaires,
+dont le texte réel observé) ; laisse la référence intacte si l'index déduit dépasse le nombre de
+sources réelles, plutôt que de risquer un remplacement incorrect.
+
 **"Mise en contexte scientifique" trop vague — séparée en un second appel LLM isolé, pas
 renforcée dans le même prompt.** Signalé en usage réel (résumés générés manuellement) : cette
 section se limitait souvent à mentionner que des extraits existaient, sans dire ce qu'ils

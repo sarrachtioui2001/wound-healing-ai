@@ -41,7 +41,12 @@ from measure import area_px_to_cm2, extract_contours, wound_area_px
 from metrics import confusion_counts, dice_score, iou_score
 from predict import draw_contour_overlay, load_model, predict_mask
 from preprocess import clean_image
-from chatbot import detecter_citations_suspectes, generer_resume_stream, repondre_stream
+from chatbot import (
+    corriger_references_ordinales,
+    detecter_citations_suspectes,
+    generer_resume_stream,
+    repondre_stream,
+)
 
 st.set_page_config(page_title="Segmentation de plaie", page_icon="🩹", layout="wide")
 
@@ -863,6 +868,7 @@ with tab_kinetics:
                         with st.spinner("Génération du résumé (peut prendre 1 à 2 minutes)..."):
                             morceaux, sources = generer_resume_stream(rows)
                             resume = "".join(morceaux)
+                        resume = corriger_references_ordinales(resume, sources)
                         citations_suspectes = detecter_citations_suspectes(resume, sources)
                         st.write(resume)
                         if sources:
