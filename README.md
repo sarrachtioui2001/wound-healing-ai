@@ -501,6 +501,19 @@ par reciprocal rank fusion. Changement de code minimal, aucun coût ni dépendan
   limite pas au texte du prompt — changer le contexte injecté (même avec du contenu réel,
   sans rien inventer) peut déstabiliser des sections du résumé qui n'utilisent pourtant pas ce
   contexte.
+- **Décision révisée le 2026-09-10, après la séparation en deux appels LLM** (voir plus bas,
+  "Mise en contexte scientifique" isolée dans `PROMPT_CONTEXTE`) : le risque ci-dessus datait de
+  l'architecture à un seul appel, où mesures et contexte partageaient le même prompt. Une fois
+  cette section isolée dans son propre appel qui ne reçoit plus jamais aucune mesure, le
+  mécanisme même de la fabrication (le LLM confond un chiffre du contexte avec une mesure de
+  l'utilisateur) ne peut structurellement plus se produire. Retesté en isolation (3 générations,
+  `generer_resume_stream` uniquement — `_construire_prompt`/chat interactif inchangé) : **0
+  fabrication numérique**, et un article supplémentaire pertinent remonte de façon reproductible
+  ("A novel method for evaluating and visualizing scratch wound healing assays using level-set
+  and image sector analysis", 2025). `hybride=True` activé dans `generer_resume_stream`
+  uniquement ; `_construire_prompt` (chat interactif, `PROMPT_TEMPLATE`) reste `hybride=False`
+  car ce prompt mélange encore mesures et contexte dans un seul appel — le risque d'origine s'y
+  applique toujours tel quel.
 
 ### Fiabilité de la génération par LLM
 
@@ -738,14 +751,16 @@ pas des manques à corriger dans l'immédiat.
   avec un embedding multilingue a déjà été mené (voir section Base documentaire du RAG ci-dessus) :
   amélioration partielle mais pas suffisante pour être adoptée telle quelle. Une recherche
   hybride mots-clés + embeddings a aussi été testée : gain net sur ce même benchmark
-  (Recall@3 60 %→70 %, voir section "Recherche hybride" ci-dessus) mais déstabilise la
-  génération du résumé LLM en aval — validée côté retrieval, pas encore exploitable côté
-  chatbot sans repenser comment isoler la génération de ce contexte (ex : un appel LLM séparé
-  par section, piste déjà notée plus haut). Pistes restantes pour une itération plus poussée :
-  un modèle multilingue plus grand (`multilingual-e5-base`), l'augmentation de `n_results`, ou
-  résoudre l'incompatibilité hybride/génération elle-même — chacune à valider par le même
-  benchmark de retrieval ET par le test d'isolation de génération avant/après, pas par un
-  changement à l'aveugle.
+  (Recall@3 60 %→70 %, voir section "Recherche hybride" ci-dessus), initialement écartée pour la
+  génération car elle déstabilisait le résumé LLM — **résolu depuis** (2026-09-10) en isolant la
+  section littérature dans son propre appel LLM (voir "Mise en contexte scientifique" et
+  "Recherche hybride" ci-dessus) : `hybride=True` est maintenant activé dans
+  `generer_resume_stream`, retesté 3/3 propre. Reste vrai uniquement pour le chat interactif
+  (`_construire_prompt`/`PROMPT_TEMPLATE`), qui mélange encore mesures et contexte dans un seul
+  appel — la même séparation pourrait s'y appliquer, non encore faite. Pistes restantes pour une
+  itération plus poussée : un modèle multilingue plus grand (`multilingual-e5-base`),
+  l'augmentation de `n_results` — chacune à valider par le même benchmark de retrieval ET par un
+  test d'isolation de génération avant/après, pas par un changement à l'aveugle.
 - **Validation externe** : évaluer le modèle sur des images de scratch assay d'un autre
   laboratoire/microscope demanderait un nouveau jeu de données annoté, non disponible à ce stade —
   perspective la plus utile pour renforcer la généralisation, mais qui dépasse une simple

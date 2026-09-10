@@ -723,16 +723,20 @@ def generer_resume_stream(rows: list[dict], n_articles: int = 3):
         "wound healing assay reproducibility standardisation kinetics time-lapse "
         "phase contrast tracking cell migration dynamics"
     )
-    # hybride=False (décision finale, 2026-09-08) : un test d'isolation avait
-    # montré 3/3 générations en hybride fabriquant des bornes d'intervalle et un
-    # taux de fermeture inexistants (ex: "36-48h", alors que ROWS n'a que
-    # 0/24/48h) contre 2/3 correctes en embeddings seuls -- activé un temps sur
-    # demande explicite malgré ce risque, puis revenu en arrière après
-    # reconsidération (voir chatbot_prompt_fragility, mémoire projet) : pour un
-    # usage scientifique sérieux, le risque de chiffres fabriqués l'emporte sur
-    # le gain de retrieval. Mode hybride gardé uniquement comme option validée
-    # pour les métriques de retrieval (voir evaluate_retrieval.py).
-    articles = chercher(requete_litterature, n=n_articles, hybride=False)
+    # hybride=True (décision révisée le 2026-09-10, voir chatbot_prompt_fragility,
+    # mémoire projet) : le risque documenté ci-dessus (fabrication de chiffres,
+    # 2026-09-08) datait de l'architecture à UN SEUL appel LLM, où le contexte
+    # littéraire et les mesures partageaient le même prompt. Depuis la séparation
+    # en deux appels (PROMPT_RAPPORT / PROMPT_CONTEXTE, voir plus bas), cet appel-ci
+    # ne reçoit plus jamais aucune mesure -- retesté en isolation (3 générations) :
+    # 0 fabrication numérique, et un article pertinent supplémentaire remonte de
+    # façon reproductible ("A novel method for evaluating and visualizing scratch
+    # wound healing assays using level-set and image sector analysis", 2025). Le
+    # risque d'origine ne s'applique donc plus structurellement à cet appel précis.
+    # `_construire_prompt` (chat interactif, PROMPT_TEMPLATE) reste en revanche
+    # hybride=False : ce prompt-là mélange encore mesures et contexte dans un seul
+    # appel, donc le risque d'origine s'y applique toujours tel quel.
+    articles = chercher(requete_litterature, n=n_articles, hybride=True)
 
     synthese = _calculer_synthese(rows)
     intervalles = _calculer_intervalles(rows)
