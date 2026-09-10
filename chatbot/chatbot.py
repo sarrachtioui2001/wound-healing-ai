@@ -122,6 +122,24 @@ def _format_contexte(articles: list[dict]) -> str:
     )
 
 
+def _intro_articles(articles: list[dict]) -> str:
+    """Ligne fixe listant les titres réellement retournés par le retrieval, entre
+    guillemets, composée en Python plutôt que laissée à la charge du LLM. Constaté
+    en pratique (retour biologiste, 2026-09-09) : même avec une consigne "OBLIGATOIRE"
+    de citer au moins un titre entre guillemets, mistral 7B omet parfois toute
+    citation (ex: "un article de 2023" sans titre ni guillemets) ou recopie un titre
+    tronqué sans guillemets -- pas un risque de chiffre fabriqué, mais un défaut de
+    forme qu'une consigne de prompt supplémentaire ne suffisait pas à éliminer de
+    façon fiable. Affichée avant le paragraphe de synthèse du LLM, qui n'a donc plus
+    à se charger lui-même de la citation."""
+    if not articles:
+        return "(aucun article disponible)"
+    titres = [f"« {a['titre']} » ({a['annee']})" for a in articles]
+    if len(titres) == 1:
+        return f"Article considéré : {titres[0]}."
+    return "Articles considérés : " + ", ".join(titres[:-1]) + " et " + titres[-1] + "."
+
+
 _ARRET = object()  # sentinelle : signale la fin normale du flux dans la file
 
 
@@ -449,12 +467,18 @@ assay), à partir d'extraits d'articles déjà sélectionnés pour leur pertinen
 Extraits d'articles scientifiques pertinents :
 {contexte}
 
+Les titres de ces articles sont déjà affichés au lecteur juste avant ton paragraphe (ligne
+"Articles considérés : ...") : NE LES RECITE PAS TOI-MÊME et NE LES NUMÉROTE JAMAIS (jamais de
+titre entre guillemets, jamais "le premier article", jamais "l'article de [année]", jamais
+"Titre 1"/"Titre 2"/"(Titre 1 et 2)"/"(Titre 1 à 3)" ni aucune autre référence par numéro ou
+position) — ton paragraphe ne parle que de CE QU'ils établissent, jamais de leur identité ni de
+leur rang, déjà connus du lecteur.
+
 Rédige un paragraphe COURT, 3 phrases MAXIMUM au total (jamais plus, même si plusieurs extraits \
 sont pertinents) — PAS une phrase ni un paragraphe par article, ce paragraphe reste une synthèse \
 groupée, jamais une revue de littérature détaillée :
-- Si un ou plusieurs extraits ci-dessus apportent un éclairage pertinent, UNE SEULE phrase cite
-  ensemble leur(s) titre(s) complet(s) entre guillemets (jamais "le premier article") et résume en
-  bloc ce qu'ils établissent concrètement (méthode d'imagerie quantitative, mécanisme de migration
+- Si un ou plusieurs extraits ci-dessus apportent un éclairage pertinent, résume en bloc ce qu'ils
+  établissent concrètement ensemble (méthode d'imagerie quantitative, mécanisme de migration
   cellulaire, intérêt d'un suivi temporel de la fermeture...) — dis CE QU'ils établissent, pas
   seulement QU'ils existent, et ne détaille jamais leur méthodologie article par article. Jamais de
   lien ni d'URL (les extraits n'en fournissent pas).
@@ -729,7 +753,11 @@ def generer_resume_stream(rows: list[dict], n_articles: int = 3):
 
     def flux():
         yield from flux_resultats
-        yield "\n\n**Mise en contexte scientifique**\n"
+        yield "\n\n**Mise en contexte scientifique**\n\n"
+        # Titres affichés en dur (Python), jamais laissés à la charge du LLM : voir
+        # _intro_articles -- une consigne de prompt seule ("cite au moins un titre")
+        # ne suffisait pas à garantir leur présence de façon fiable.
+        yield _intro_articles(articles) + " "
         # Appel séparé, lancé seulement une fois le premier flux épuisé : ce prompt
         # ne contient aucune mesure (voir PROMPT_CONTEXTE), donc rien de ce résumé
         # numérique ne peut être contaminé par la génération de cette section.
