@@ -49,7 +49,6 @@ from chatbot import (
     detecter_contradiction_reouverture,
     generer_resume_stream,
     nettoyer_placeholder_reouverture,
-    repondre_stream,
 )
 
 st.set_page_config(page_title="Segmentation de plaie", page_icon="🩹", layout="wide")
@@ -583,11 +582,6 @@ with tab_single:
                     "pour obtenir une unité physique (cm², mm²...)."
                 )
 
-        resultat_segmentation = {"image": image_file.name, "surface_px2": area_px}
-        if pixels_per_cm > 0:
-            resultat_segmentation["surface_cm2"] = round(area_cm2, 2)
-        st.session_state["dernier_resultat_segmentation"] = resultat_segmentation
-
         with st.container(border=True):
             st.subheader("✏️ Correction manuelle du contour")
             st.caption(
@@ -784,7 +778,6 @@ with tab_kinetics:
             st.session_state["kinetics_csv_path"] = save_csv(rows, "outputs/kinetics")
             st.session_state["kinetics_plot_path"] = save_plot(rows, "outputs/kinetics")
             st.session_state.pop("kinetics_resume", None)
-            st.session_state["kinetics_chat_messages"] = []
 
         if st.session_state.get("kinetics_rows"):
             rows = st.session_state["kinetics_rows"]
@@ -798,24 +791,6 @@ with tab_kinetics:
             duration_h = rows[-1]["time_h"] - rows[0]["time_h"]
             final_closure = rows[-1]["closure_pct"]
             avg_speed = final_closure / duration_h if duration_h > 0 else None
-
-            resultat_segmentation_chat = {
-                "fermeture_finale_pct": final_closure,
-                "duree_h": duration_h,
-                "vitesse_moyenne_pct_par_h": round(avg_speed, 2) if avg_speed is not None else None,
-            }
-            # Sans ceci, le chat interactif ne recevait AUCUNE donnée par intervalle -- une
-            # question sur "pourquoi les taux diffèrent entre 0h-24h et 24h-48h" ne pouvait donc
-            # qu'être répondue vaguement (seule la vitesse moyenne était disponible). Constaté en
-            # usage réel (2026-09-12, question suggérée dynamique) : le LLM répétait la vitesse
-            # moyenne au lieu de comparer les intervalles, faute d'avoir ce chiffre à disposition.
-            intervalles_chat = _calculer_intervalles(rows)
-            if len(intervalles_chat) >= 2:
-                resultat_segmentation_chat["vitesses_par_intervalle"] = "; ".join(
-                    f"{iv['t_debut']}h-{iv['t_fin']}h : {iv['vitesse_pct_h']}%/h"
-                    for iv in intervalles_chat
-                )
-            st.session_state["dernier_resultat_segmentation"] = resultat_segmentation_chat
 
             s1, s2, s3 = st.columns(3)
             s1.metric("Fermeture finale", f"{final_closure:.1f} %",
@@ -927,74 +902,3 @@ with tab_kinetics:
                         st.session_state["kinetics_resume"].get("contradiction_reouverture")
                     )
 
-            with st.container(border=True):
-                st.subheader("💬 Poser une question sur ce résultat")
-                st.caption(
-                    "L'assistant compare ce résultat à la littérature scientifique sur la "
-                    "cicatrisation (RAG local via ChromaDB) et répond via un modèle Ollama "
-                    "(mistral). Conversation valable pour cette analyse uniquement (non "
-                    "conservée d'une session à l'autre)."
-                )
-                st.caption(
-                    "⚠️ Met en contexte un résultat de recherche in vitro à la lumière de la "
-                    "littérature scientifique — ne fournit ni diagnostic ni recommandation "
-                    "médicale."
-                )
-
-                st.session_state.setdefault("kinetics_chat_messages", [])
-
-                for message in st.session_state["kinetics_chat_messages"]:
-                    with st.chat_message(message["role"]):
-                        st.write(message["content"])
-                        if message.get("sources"):
-                            st.caption("Sources : " + ", ".join(message["sources"]))
-                        afficher_citations_suspectes(message.get("citations_suspectes"))
-
-                # Questions suggérées retirées le 2026-09-12 (retour utilisateur) : les réponses
-                # générées à ces questions restaient trop souvent génériques (répétition de la
-                # vitesse moyenne au lieu de cibler l'intervalle demandé), malgré une correction
-                # de données (vitesses_par_intervalle ajoutée à resultat_segmentation, conservée
-                # ci-dessous) et un renforcement de prompt testé mais jamais appliqué. Plutôt que
-                # d'afficher des suggestions dont la réponse déçoit régulièrement, champ de
-                # saisie simple sans suggestion.
-                question = st.chat_input("Votre question...", key="kinetics_chat_input")
-
-                if question:
-                    st.session_state["kinetics_chat_messages"].append(
-                        {"role": "user", "content": question}
-                    )
-                    with st.chat_message("user"):
-                        st.write(question)
-
-                    with st.chat_message("assistant"):
-                        try:
-                            with st.spinner("Recherche dans la littérature..."):
-                                morceaux, sources = repondre_stream(
-                                    st.session_state["dernier_resultat_segmentation"], question
-                                )
-                            reponse = st.write_stream(morceaux)
-                        except RuntimeError as exc:
-                            st.error(str(exc))
-                            st.session_state["kinetics_chat_messages"].append(
-                                {"role": "assistant", "content": str(exc), "sources": []}
-                            )
-                        else:
-                            # corriger_references_ordinales n'était appliqué qu'au résumé de
-                            # cinétique, jamais ici (oubli constaté le 2026-09-12) -- appliqué
-                            # après coup sur reponse, comme partout ailleurs dans ce fichier.
-                            # Limite assumée : st.write_stream affiche déjà le texte brut au fil
-                            # de la génération (streaming en direct), donc cette toute première
-                            # apparition peut encore montrer "le premier article" ; c'est la
-                            # version CORRIGÉE qui est sauvegardée dans l'historique, affichée à
-                            # chaque nouveau rendu de la conversation par la suite.
-                            reponse = corriger_references_ordinales(reponse, sources)
-                            citations_suspectes = detecter_citations_suspectes(reponse, sources)
-                            if sources:
-                                st.caption("Sources : " + ", ".join(sources))
-                            afficher_citations_suspectes(citations_suspectes)
-                            st.session_state["kinetics_chat_messages"].append(
-                                {
-                                    "role": "assistant", "content": reponse, "sources": sources,
-                                    "citations_suspectes": citations_suspectes,
-                                }
-                            )
