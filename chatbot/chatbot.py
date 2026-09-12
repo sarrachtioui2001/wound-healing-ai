@@ -36,6 +36,20 @@ MODEL = "mistral"
 CHUNK_TIMEOUT_S = 45.0
 _client = ollama.Client()
 
+# Règle globale ajoutée le 2026-09-12 (retour utilisateur, capture d'écran du chat interactif) :
+# une première tentative de correction avait ciblé uniquement la section "Littérature" (qui
+# interdisait déjà "conforme à la littérature"/"en accord"/"confirme"), mais un test d'isolation
+# (3 générations baseline vs 3 candidat) a montré que le LLM place ces généralisations/fabrications
+# dans "Interprétation" à la place -- section qui n'avait jamais cette interdiction. Pire : le
+# candidat v1 laissait passer une fabrication plus grave qu'à l'origine ("un taux de fermeture de
+# 80% à 90% après 72 heures est souvent rapporté", un chiffre inventé absent des 3 extraits réels).
+# La règle a donc été déplacée dans "Consignes valables dans les 4 sections" (s'applique aussi à
+# Interprétation) et étendue pour interdire explicitement d'inventer un chiffre de comparaison.
+# Retesté (3 vs 3, même question de la capture) : baseline 3/3 générations avec un problème (dont
+# une plage de valeurs entièrement fabriquée, "20% à 100% en 7 à 21 jours"), candidat 1/3 seulement
+# (et ce cas résiduel s'auto-corrige immédiatement dans la même phrase : "cependant, il est
+# difficile de comparer directement..."). Amélioration nette, jamais une élimination totale --
+# cohérent avec toutes les autres itérations de prompt de ce projet. Gardé.
 PROMPT_TEMPLATE = """Tu es un assistant scientifique qui aide un biologiste à interpréter un \
 résultat de segmentation automatique de plaie (wound healing assay), en répondant à sa question.
 
@@ -92,6 +106,12 @@ vient de la littérature :
   mettre ce point en contexte de façon pertinente ici") plutôt que de forcer un lien approximatif.
 
 Consignes valables dans les 4 sections :
+- N'affirme JAMAIS, dans AUCUNE des 4 sections (y compris Interprétation), qu'une valeur est
+  "conforme à la littérature", "en accord avec les études", une "moyenne normale", ou qu'elle
+  est "souvent"/"généralement"/"habituellement"/"typiquement" observée/rapportée dans la
+  littérature -- sauf si un extrait ci-dessus le dit EXPLICITEMENT avec sa propre valeur
+  chiffrée citée. N'invente JAMAIS un chiffre de comparaison (pourcentage, durée, vitesse...)
+  absent des extraits fournis, même à titre d'exemple ou d'ordre de grandeur.
 - Ne pose jamais de question de clarification en retour (pas de "pouvez-vous préciser...",
   "quelle est la durée de l'expérience ?", etc.) : réponds directement avec le résultat de
   segmentation et les extraits déjà fournis ci-dessus. S'il manque une information pour répondre
@@ -1054,10 +1074,21 @@ def generer_resume_stream(rows: list[dict], n_articles: int = 3):
     )
     prompt_contexte = PROMPT_CONTEXTE.format(contexte=_format_contexte(articles))
 
-    # Lancé eagerly (pas dans le générateur ci-dessous) pour garder le contrat de
-    # repondre_stream : lever RuntimeError immédiatement si Ollama est injoignable,
-    # avant de renvoyer quoi que ce soit à l'appelant.
+    # Les deux appels sont lancés eagerly, AVANT le générateur ci-dessous (pas seulement pour
+    # garder le contrat de repondre_stream -- lever RuntimeError immédiatement si Ollama est
+    # injoignable -- mais aussi pour les faire tourner en parallèle plutôt que l'un après
+    # l'autre). _stream_ollama démarre son thread producteur dès l'appel, avant même que son
+    # générateur soit consommé : le second appel se met donc déjà en file d'attente côté Ollama
+    # pendant que le premier génère, au lieu d'attendre que flux_resultats soit épuisé. Aucun
+    # changement de contenu ni de prompt (prompt_contexte est identique) : seul le moment où
+    # la requête démarre change, donc aucun test d'isolation n'est nécessaire. Gain réel si
+    # Ollama sert les deux requêtes en parallèle (OLLAMA_NUM_PARALLEL), sans jamais dégrader le
+    # temps total si le serveur les sérialise malgré tout -- la détection de blocage
+    # (CHUNK_TIMEOUT_S) ne démarre son décompte qu'à la première itération du générateur
+    # consommateur, pas à la création du thread producteur, donc rien ne se déclenche à tort
+    # pendant que ce second appel patiente en file d'attente.
     flux_resultats = _stream_ollama(prompt_resultats)
+    flux_contexte = _stream_ollama(prompt_contexte)
 
     def flux():
         yield from flux_resultats
@@ -1066,8 +1097,7 @@ def generer_resume_stream(rows: list[dict], n_articles: int = 3):
         # _intro_articles -- une consigne de prompt seule ("cite au moins un titre")
         # ne suffisait pas à garantir leur présence de façon fiable.
         yield _intro_articles(articles) + " "
-        # Appel séparé, lancé seulement une fois le premier flux épuisé : ce prompt
-        # ne contient aucune mesure (voir PROMPT_CONTEXTE), donc rien de ce résumé
+        # Ce prompt ne contient aucune mesure (voir PROMPT_CONTEXTE), donc rien de ce résumé
         # numérique ne peut être contaminé par la génération de cette section.
         #
         # Accumulé en un seul bloc plutôt que streamé morceau par morceau (contrairement
@@ -1075,7 +1105,7 @@ def generer_resume_stream(rows: list[dict], n_articles: int = 3):
         # pour repérer et préserver la phrase de clôture avant de tronquer le surplus (voir
         # sa docstring) -- coût UX mineur (cette section apparaît d'un bloc au lieu de mot
         # à mot), accepté au profit d'une longueur fiable.
-        texte_contexte = "".join(_stream_ollama(prompt_contexte))
+        texte_contexte = "".join(flux_contexte)
         yield limiter_paragraphe_contexte(texte_contexte)
         # Phrase numérique ajoutée APRÈS le paragraphe du LLM, jamais dans son
         # prompt (voir _phrase_liaison_resultats) : relie le résultat mesuré à la
