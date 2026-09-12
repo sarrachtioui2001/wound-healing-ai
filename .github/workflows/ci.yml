@@ -33,3 +33,8 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t wound-segmentation:ci .
+
+      - name: Smoke test the built image (imports, not full app)
+        run: |
+          docker run --rm --entrypoint python wound-segmentation:ci -c \
+            "import torch, segmentation_models_pytorch, chatbot.chatbot, src.model"

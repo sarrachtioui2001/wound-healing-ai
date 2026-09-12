@@ -22,6 +22,11 @@ COPY . .
 
 EXPOSE 8501
 
+# Streamlit exposes a built-in health endpoint; no extra system package (curl) needed
+# since python is already available in the image.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health', timeout=3)"
+
 # data/, outputs/ and chatbot/chroma_db are excluded from the build context
 # (see .dockerignore) and expected to be bind-mounted at runtime (see
 # docker-compose.yml) rather than baked into the image.

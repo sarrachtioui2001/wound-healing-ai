@@ -17,6 +17,7 @@ from albumentations.pytorch import ToTensorV2
 sys.path.insert(0, os.path.dirname(__file__))
 from measure import area_px_to_cm2, extract_contours, wound_area_px
 from model import build_model
+from model_registry import PRODUCTION_ALIAS, REGISTERED_MODEL_NAME
 
 CKPT_DIR = "outputs/checkpoints"
 PRED_DIR = "outputs/predictions"
@@ -25,13 +26,35 @@ IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
 
-def load_model(run_name: str, device: torch.device):
-    ckpt_path = os.path.join(CKPT_DIR, f"{run_name}_best.pt")
-    checkpoint = torch.load(ckpt_path, map_location=device)
+def _build_model_from_checkpoint(checkpoint: dict, device: torch.device):
     model = build_model(encoder_name=checkpoint["encoder"], encoder_weights=None).to(device)
     model.load_state_dict(checkpoint["model_state"])
     model.eval()
     return model, checkpoint["img_size"]
+
+
+def load_model(run_name: str, device: torch.device):
+    ckpt_path = os.path.join(CKPT_DIR, f"{run_name}_best.pt")
+    checkpoint = torch.load(ckpt_path, map_location=device)
+    return _build_model_from_checkpoint(checkpoint, device)
+
+
+def load_model_from_registry(
+    device: torch.device, name: str = REGISTERED_MODEL_NAME, alias: str = PRODUCTION_ALIAS
+):
+    """Charge la version pointée par l'alias (par défaut "production") dans le MLflow
+    Model Registry, au lieu d'un checkpoint local -- disponible pour un usage CLI/serving
+    (voir src/model_registry.py). Non câblée dans app.py par défaut : l'application
+    continue d'utiliser un checkpoint local, plus simple et sans dépendance réseau/registre
+    pour l'utilisateur courant."""
+    from mlflow.artifacts import download_artifacts
+    from mlflow.tracking import MlflowClient
+
+    client = MlflowClient()
+    version = client.get_model_version_by_alias(name, alias)
+    local_path = download_artifacts(artifact_uri=version.source)
+    checkpoint = torch.load(local_path, map_location=device)
+    return _build_model_from_checkpoint(checkpoint, device)
 
 
 def _predict_probs(model, image_t: torch.Tensor) -> torch.Tensor:

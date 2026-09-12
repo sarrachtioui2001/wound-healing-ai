@@ -325,12 +325,23 @@ déjà discutée ci-dessus) et n'est reportée qu'à titre indicatif.
 
 ### Base documentaire du RAG
 
-41 articles sélectionnés manuellement (`chatbot/articles_cicatrisation.json`), et non
+48 articles sélectionnés manuellement (`chatbot/articles_cicatrisation.json`), et non
 100+ articles récupérés automatiquement sans tri : chaque candidat a été examiné (titre +
 résumé officiel vérifié à la source) et retenu ou rejeté selon sa pertinence réelle pour le
 projet, avec la décision et la raison tracées dans
 [`chatbot/curation_log.csv`](chatbot/curation_log.csv). Chaque article retenu porte une
 `category` (voir `chatbot/index_articles.py`).
+
+**Élargissement ciblé (session 2026-09-11)** : 2 articles réels ajoutés après vérification
+directe (arXiv/PMC, pas de résumé de mémoire) sur des catégories sous-représentées choisies
+délibérément en dehors des deux points déjà documentés comme sans issue ci-dessous
+(comparaison Dice/U-Net, cinétique temporelle) : la distinction migration/prolifération dans
+la fermeture (PLoS Computational Biology, 2025), et la quantification par Segment Anything
+Model avec discussion de la variabilité intra/inter-observateur (arXiv, 2024). Un troisième
+candidat (SegQC, contrôle qualité de segmentation) a été ajouté puis **retiré** après mesure :
+il faisait chuter le Recall@3 global de 69,2 % à 61,5 % en délogeant "Metrics reloaded" du
+top 3 sur la question Hausdorff, trop proche sémantiquement (voir `curation_log.csv`) —
+résultat négatif documenté plutôt que masqué, conformément à la méthodologie du projet.
 
 Couverture actuelle :
 - ✅ Principes, limites et protocole du scratch assay (7) — dont un dispositif open-source
@@ -714,6 +725,18 @@ Suite complète : 33/33.
   Les 3 derniers runs sont l'étude multi-seed de robustesse (voir Résultats ci-dessus) ; même
   configuration que `unet_resnet34_holdout`, split et initialisation régénérés par seed. Pas
   encore d'autre configuration (encodeur/img_size/lr) testée — voir Perspectives.
+- **Model Registry** (MLflow, [src/model_registry.py](src/model_registry.py)) : `python -m
+  src.train --register_model` enregistre le meilleur checkpoint comme nouvelle version du
+  modèle `wound-segmentation-unet`, et la promeut automatiquement vers l'alias `production`
+  si son Dice de validation dépasse celui de la version actuellement en production (ou si
+  aucune version n'y est encore) — règle simple et volontairement stricte ("meilleur Dice
+  gagne"), pas un pipeline d'A/B testing. Option désactivée par défaut (comme `--tta`), un
+  problème de registre ne fait jamais échouer un entraînement réel (capturé et loggé). La
+  version en production se charge indépendamment d'un checkpoint local via
+  `predict.load_model_from_registry()` — disponible pour un usage CLI/serving, non câblée
+  dans l'app Streamlit par défaut (qui continue d'utiliser un checkpoint local, plus simple
+  et sans dépendance réseau pour l'utilisateur courant). Aucun déploiement réel derrière
+  cette promotion : voir "Ce qui n'est volontairement pas fait" ci-dessous.
 - **Tests** (`tests/`) : mesures, métriques, ensemble (vote majoritaire, carte de confiance),
   retrieval, synthèse chatbot, détection de citations fabriquées, régression LLM (Ollama requis,
   auto-ignorée sinon).
@@ -721,9 +744,10 @@ Suite complète : 33/33.
 ### Ce qui n'est volontairement pas fait
 
 Pas de versioning des données/checkpoints volumineux (`.gitignore` les exclut,
-en attendant un outil dédié type DVC), pas de registre de modèles, pas de
-déploiement automatisé. Cohérent avec l'échelle du projet — limites connues,
-pas des manques à corriger dans l'immédiat.
+en attendant un outil dédié type DVC), pas de déploiement automatisé (le Model
+Registry ci-dessous versionne et promeut un modèle, il ne redéploie rien).
+Cohérent avec l'échelle du projet — limites connues, pas des manques à corriger
+dans l'immédiat.
 
 ## Limites connues
 
@@ -750,7 +774,7 @@ pas des manques à corriger dans l'immédiat.
 ## Perspectives
 
 - **Qualité de récupération du RAG** : la base documentaire couvre maintenant toutes les
-  catégories prévues (41 articles, voir ci-dessus), mais la recherche sémantique par défaut
+  catégories prévues (48 articles, voir ci-dessus), mais la recherche sémantique par défaut
   (embeddings ChromaDB orientés anglais) ne remonte pas toujours l'article le plus pertinent. Le
   benchmark reproductible ci-dessus (`chatbot/evaluate_retrieval.py`, Recall@3 = 66,7 % (8/12),
   MRR@10 = 0,526) affine le diagnostic initial : ce n'est pas seulement un écart français/anglais (la

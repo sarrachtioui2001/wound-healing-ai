@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from dataset import PlateSegmentationDataset, load_ids
 from metrics import DiceBCELoss, confusion_counts, dice_score, iou_score
 from model import build_model
+from model_registry import enregistrer_et_promouvoir
 
 SPLITS_DIR = "data/splits"
 CKPT_DIR = "outputs/checkpoints"
@@ -78,6 +79,10 @@ def main():
                          help="dossier contenant train.txt/val.txt (défaut: data/splits, les "
                               "splits canoniques -- utiliser un dossier alternatif, généré par "
                               "src.split_data --out_dir, pour une étude multi-seed)")
+    parser.add_argument("--register_model", action="store_true",
+                         help="enregistre le meilleur checkpoint dans le MLflow Model Registry "
+                              "et le promeut en production s'il bat la version actuelle (voir "
+                              "src/model_registry.py) -- opt-in, comme --tta dans evaluate.py")
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -119,7 +124,7 @@ def main():
     log_path = os.path.join(LOG_DIR, f"{args.run_name}_training_log.csv")
 
     mlflow.set_experiment(MLFLOW_EXPERIMENT)
-    with mlflow.start_run(run_name=args.run_name):
+    with mlflow.start_run(run_name=args.run_name) as run:
         mlflow.log_params(vars(args))
         mlflow.log_param("device", str(device))
         mlflow.log_param("train_size", len(train_ids))
@@ -182,6 +187,17 @@ def main():
         mlflow.log_metric("best_val_dice", best_dice)
         mlflow.log_artifact(best_ckpt_path)
         mlflow.log_artifact(log_path)
+
+        if args.register_model:
+            # Ne doit jamais faire échouer un entraînement réel : un problème de
+            # registre (permissions, backend indisponible...) est loggé, pas fatal.
+            try:
+                message = enregistrer_et_promouvoir(
+                    run.info.run_id, os.path.basename(best_ckpt_path), best_dice
+                )
+                print(f"model registry: {message}")
+            except Exception as exc:
+                print(f"model registry: échec de l'enregistrement, ignoré ({exc})")
 
     print(f"training done. best val dice: {best_dice:.4f}. log: {log_path}")
 
