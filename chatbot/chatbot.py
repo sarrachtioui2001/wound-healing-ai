@@ -1074,21 +1074,18 @@ def generer_resume_stream(rows: list[dict], n_articles: int = 3):
     )
     prompt_contexte = PROMPT_CONTEXTE.format(contexte=_format_contexte(articles))
 
-    # Les deux appels sont lancés eagerly, AVANT le générateur ci-dessous (pas seulement pour
-    # garder le contrat de repondre_stream -- lever RuntimeError immédiatement si Ollama est
-    # injoignable -- mais aussi pour les faire tourner en parallèle plutôt que l'un après
-    # l'autre). _stream_ollama démarre son thread producteur dès l'appel, avant même que son
-    # générateur soit consommé : le second appel se met donc déjà en file d'attente côté Ollama
-    # pendant que le premier génère, au lieu d'attendre que flux_resultats soit épuisé. Aucun
-    # changement de contenu ni de prompt (prompt_contexte est identique) : seul le moment où
-    # la requête démarre change, donc aucun test d'isolation n'est nécessaire. Gain réel si
-    # Ollama sert les deux requêtes en parallèle (OLLAMA_NUM_PARALLEL), sans jamais dégrader le
-    # temps total si le serveur les sérialise malgré tout -- la détection de blocage
-    # (CHUNK_TIMEOUT_S) ne démarre son décompte qu'à la première itération du générateur
-    # consommateur, pas à la création du thread producteur, donc rien ne se déclenche à tort
-    # pendant que ce second appel patiente en file d'attente.
+    # Lancé eagerly (pas dans le générateur ci-dessous) pour garder le contrat de
+    # repondre_stream : lever RuntimeError immédiatement si Ollama est injoignable,
+    # avant de renvoyer quoi que ce soit à l'appelant.
+    #
+    # Testé en parallèle avec le second appel (2026-09-12) puis ABANDONNÉ : sur une machine où
+    # le GPU est déjà limité pour une seule génération (54%/46% CPU/GPU pour mistral 7B seul,
+    # RTX 2050 4 Go), lancer les deux appels en même temps les fait se disputer les mêmes
+    # ressources -- observé en usage réel, la 2e génération (PROMPT_CONTEXTE) a alors dépassé
+    # CHUNK_TIMEOUT_S et s'est interrompue en pleine génération. Le gain mesuré n'était que de
+    # ~4,4% (146,4s -> 139,9s) : largement inférieur au risque d'un échec complet de section.
+    # Retour au séquentiel : le second appel n'est lancé qu'une fois le premier épuisé.
     flux_resultats = _stream_ollama(prompt_resultats)
-    flux_contexte = _stream_ollama(prompt_contexte)
 
     def flux():
         yield from flux_resultats
@@ -1097,7 +1094,8 @@ def generer_resume_stream(rows: list[dict], n_articles: int = 3):
         # _intro_articles -- une consigne de prompt seule ("cite au moins un titre")
         # ne suffisait pas à garantir leur présence de façon fiable.
         yield _intro_articles(articles) + " "
-        # Ce prompt ne contient aucune mesure (voir PROMPT_CONTEXTE), donc rien de ce résumé
+        # Appel séparé, lancé seulement une fois le premier flux épuisé : ce prompt
+        # ne contient aucune mesure (voir PROMPT_CONTEXTE), donc rien de ce résumé
         # numérique ne peut être contaminé par la génération de cette section.
         #
         # Accumulé en un seul bloc plutôt que streamé morceau par morceau (contrairement
@@ -1105,7 +1103,7 @@ def generer_resume_stream(rows: list[dict], n_articles: int = 3):
         # pour repérer et préserver la phrase de clôture avant de tronquer le surplus (voir
         # sa docstring) -- coût UX mineur (cette section apparaît d'un bloc au lieu de mot
         # à mot), accepté au profit d'une longueur fiable.
-        texte_contexte = "".join(flux_contexte)
+        texte_contexte = "".join(_stream_ollama(prompt_contexte))
         yield limiter_paragraphe_contexte(texte_contexte)
         # Phrase numérique ajoutée APRÈS le paragraphe du LLM, jamais dans son
         # prompt (voir _phrase_liaison_resultats) : relie le résultat mesuré à la
