@@ -938,7 +938,25 @@ with tab_kinetics:
                             st.caption("Sources : " + ", ".join(message["sources"]))
                         afficher_citations_suspectes(message.get("citations_suspectes"))
 
-                question = st.chat_input("Votre question...", key="kinetics_chat_input")
+                # Questions suggérées : affichées uniquement avant le premier message, pour
+                # guider un biologiste face à un champ de saisie vide sans exemple -- pur ajout
+                # d'interface (aucun changement du chatbot ni du prompt, donc aucun risque de
+                # régression sur la fiabilité de la génération).
+                question_suggeree = None
+                if not st.session_state["kinetics_chat_messages"]:
+                    st.caption("Questions suggérées :")
+                    suggestions = [
+                        "Ce taux de fermeture est-il cohérent avec la littérature scientifique ?",
+                        "Quelles sont les limites de cette mesure ?",
+                        "Comment ce résultat se compare-t-il à d'autres études de scratch assay ?",
+                        "Que dit la littérature sur la migration cellulaire dans ce contexte ?",
+                    ]
+                    colonnes = st.columns(2)
+                    for i, texte_suggestion in enumerate(suggestions):
+                        if colonnes[i % 2].button(texte_suggestion, key=f"suggestion_{i}", use_container_width=True):
+                            question_suggeree = texte_suggestion
+
+                question = st.chat_input("Votre question...", key="kinetics_chat_input") or question_suggeree
 
                 if question:
                     st.session_state["kinetics_chat_messages"].append(
