@@ -978,6 +978,15 @@ with tab_kinetics:
                                 {"role": "assistant", "content": str(exc), "sources": []}
                             )
                         else:
+                            # corriger_references_ordinales n'était appliqué qu'au résumé de
+                            # cinétique, jamais ici (oubli constaté le 2026-09-12) -- appliqué
+                            # après coup sur reponse, comme partout ailleurs dans ce fichier.
+                            # Limite assumée : st.write_stream affiche déjà le texte brut au fil
+                            # de la génération (streaming en direct), donc cette toute première
+                            # apparition peut encore montrer "le premier article" ; c'est la
+                            # version CORRIGÉE qui est sauvegardée dans l'historique, affichée à
+                            # chaque nouveau rendu de la conversation par la suite.
+                            reponse = corriger_references_ordinales(reponse, sources)
                             citations_suspectes = detecter_citations_suspectes(reponse, sources)
                             if sources:
                                 st.caption("Sources : " + ", ".join(sources))
