@@ -799,11 +799,23 @@ with tab_kinetics:
             final_closure = rows[-1]["closure_pct"]
             avg_speed = final_closure / duration_h if duration_h > 0 else None
 
-            st.session_state["dernier_resultat_segmentation"] = {
+            resultat_segmentation_chat = {
                 "fermeture_finale_pct": final_closure,
                 "duree_h": duration_h,
                 "vitesse_moyenne_pct_par_h": round(avg_speed, 2) if avg_speed is not None else None,
             }
+            # Sans ceci, le chat interactif ne recevait AUCUNE donnée par intervalle -- une
+            # question sur "pourquoi les taux diffèrent entre 0h-24h et 24h-48h" ne pouvait donc
+            # qu'être répondue vaguement (seule la vitesse moyenne était disponible). Constaté en
+            # usage réel (2026-09-12, question suggérée dynamique) : le LLM répétait la vitesse
+            # moyenne au lieu de comparer les intervalles, faute d'avoir ce chiffre à disposition.
+            intervalles_chat = _calculer_intervalles(rows)
+            if len(intervalles_chat) >= 2:
+                resultat_segmentation_chat["vitesses_par_intervalle"] = "; ".join(
+                    f"{iv['t_debut']}h-{iv['t_fin']}h : {iv['vitesse_pct_h']}%/h"
+                    for iv in intervalles_chat
+                )
+            st.session_state["dernier_resultat_segmentation"] = resultat_segmentation_chat
 
             s1, s2, s3 = st.columns(3)
             s1.metric("Fermeture finale", f"{final_closure:.1f} %",
@@ -938,25 +950,14 @@ with tab_kinetics:
                             st.caption("Sources : " + ", ".join(message["sources"]))
                         afficher_citations_suspectes(message.get("citations_suspectes"))
 
-                # Questions suggérées : affichées uniquement avant le premier message, pour
-                # guider un biologiste face à un champ de saisie vide sans exemple -- pur ajout
-                # d'interface (aucun changement du chatbot ni du prompt, donc aucun risque de
-                # régression sur la fiabilité de la génération).
-                question_suggeree = None
-                if not st.session_state["kinetics_chat_messages"]:
-                    st.caption("Questions suggérées :")
-                    suggestions = [
-                        "Ce taux de fermeture est-il cohérent avec la littérature scientifique ?",
-                        "Quelles sont les limites de cette mesure ?",
-                        "Comment ce résultat se compare-t-il à d'autres études de scratch assay ?",
-                        "Que dit la littérature sur la migration cellulaire dans ce contexte ?",
-                    ]
-                    colonnes = st.columns(2)
-                    for i, texte_suggestion in enumerate(suggestions):
-                        if colonnes[i % 2].button(texte_suggestion, key=f"suggestion_{i}", use_container_width=True):
-                            question_suggeree = texte_suggestion
-
-                question = st.chat_input("Votre question...", key="kinetics_chat_input") or question_suggeree
+                # Questions suggérées retirées le 2026-09-12 (retour utilisateur) : les réponses
+                # générées à ces questions restaient trop souvent génériques (répétition de la
+                # vitesse moyenne au lieu de cibler l'intervalle demandé), malgré une correction
+                # de données (vitesses_par_intervalle ajoutée à resultat_segmentation, conservée
+                # ci-dessous) et un renforcement de prompt testé mais jamais appliqué. Plutôt que
+                # d'afficher des suggestions dont la réponse déçoit régulièrement, champ de
+                # saisie simple sans suggestion.
+                question = st.chat_input("Votre question...", key="kinetics_chat_input")
 
                 if question:
                     st.session_state["kinetics_chat_messages"].append(
