@@ -26,7 +26,13 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "chatbot"))
-from chatbot import _calculer_intervalles, _calculer_synthese, _fr, generer_resume_stream
+from chatbot import (
+    _calculer_intervalles,
+    _calculer_synthese,
+    _fr,
+    corriger_references_ordinales,
+    generer_resume_stream,
+)
 
 
 def _ollama_disponible() -> bool:
@@ -223,3 +229,35 @@ def test_resume_llm_n_invente_pas_de_signe_negatif_sans_reouverture():
     texte = _generer_et_verifier(ROWS_SANS_REOUVERTURE)
     assert "-0,83" not in texte, f"signe négatif fabriqué sur un taux positif :\n\n{texte}"
     assert "48h-24h" not in texte, f"bornes d'intervalle inversées :\n\n{texte}"
+
+
+# Formulations désignant un article/une étude par sa position ou son année plutôt que par ce
+# qu'il montre -- interdit explicitement dans PROMPT_CONTEXTE. Le prompt seul ne suffit pas à
+# l'éliminer de façon fiable (isolation test du 2026-09-11, voir chatbot_prompt_fragility en
+# mémoire projet : observé sous la forme "la première étude"/"l'article de 2025 a introduit"
+# malgré un renforcement du prompt) -- le filet de sécurité réel est le correcteur après coup
+# corriger_references_ordinales (déjà appliqué par app.py avant tout affichage), dont la regex
+# a été étendue à "étude" en plus d'"article" pour ce test (voir _REF_ORDINALE_RE). Ce test
+# vérifie donc le résultat APRÈS correction, comme le fait réellement l'application, pas le
+# texte brut du LLM.
+_CITATIONS_PAR_POSITION_INTERDITES = [
+    "le premier article", "le deuxième article", "le second article", "le troisième article",
+    "la première étude", "la deuxième étude", "la seconde étude", "la troisième étude",
+]
+
+
+@pytest.mark.skipif(not _ollama_disponible(), reason="Ollama non disponible localement")
+def test_resume_llm_mise_en_contexte_ne_cite_pas_les_articles_par_position_apres_correction():
+    """Régression (isolation test 2026-09-11) : PROMPT_CONTEXTE interdit explicitement de
+    désigner un article par sa position/année, mais mistral contourne parfois cette consigne
+    malgré tout (comme documenté de longue date pour "le premier article", voir
+    corriger_references_ordinales). Ce test vérifie que le correcteur après coup (appliqué par
+    app.py) neutralise bien ces formulations avant tout affichage à l'utilisateur -- la garantie
+    réelle ne repose pas sur le seul respect du prompt par le LLM."""
+    morceaux, sources = generer_resume_stream(ROWS_3_POINTS)
+    texte = corriger_references_ordinales("".join(morceaux), sources)
+    assert "**Mise en contexte scientifique**" in texte
+    section = texte.split("**Mise en contexte scientifique**", 1)[1].lower()
+
+    citations = [c for c in _CITATIONS_PAR_POSITION_INTERDITES if c in section]
+    assert not citations, f"citation par position non corrigée : {citations}\n\n{section}"

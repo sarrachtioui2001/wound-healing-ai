@@ -128,6 +128,17 @@ BENCHMARK = [
             "Modeling epithelial wound closure dynamics with AI: A comparative study across cell types"
         ],
     },
+    {
+        # Catégorie ajoutée le 2026-09-11 : le corpus n'avait aucun article sur l'incertitude/
+        # l'ensemble de modèles alors que c'est le principe direct de la "carte de confiance"
+        # (vote majoritaire à 4 modèles) de l'application -- voir curation_log.csv.
+        "categorie": "incertitude_confiance",
+        "question": "How can an ensemble of deep learning models provide a confidence or uncertainty estimate for a medical image segmentation?",
+        "titres_attendus": [
+            "Calibrating Ensembles for Scalable Uncertainty Quantification in Deep Learning-based Medical Segmentation",
+            "A Review of Uncertainty Estimation and its Application in Medical Imaging",
+        ],
+    },
 ]
 
 

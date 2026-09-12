@@ -1,9 +1,9 @@
 {
   "k_recall": 3,
   "k_max": 10,
-  "n_questions": 12,
-  "recall_at_k": 0.6666666666666666,
-  "mrr_at_k_max": 0.5257936507936508,
+  "n_questions": 13,
+  "recall_at_k": 0.6923076923076923,
+  "mrr_at_k_max": 0.5608974358974359,
   "per_question": [
     {
       "categorie": "deep_learning_segmentation",
@@ -30,9 +30,9 @@
       "present_at_3": false,
       "reciprocal_rank": 0.0,
       "top_3_retournes": [
+        "Robust quantitative scratch assay",
         "A Robust and Standardized Approach to Quantify Wound Closure Using the Scratch Assay",
-        "AIM: A Computational Tool for the Automatic Quantification of Scratch Wound Healing Assays",
-        "A novel magnet-based scratch method for standardisation of wound-healing assays"
+        "AIM: A Computational Tool for the Automatic Quantification of Scratch Wound Healing Assays"
       ]
     },
     {
@@ -47,7 +47,7 @@
       "top_3_retournes": [
         "An effective device to enable consistent scratches for in vitro scratch assays",
         "AIM: A Computational Tool for the Automatic Quantification of Scratch Wound Healing Assays",
-        "A Robust and Standardized Approach to Quantify Wound Closure Using the Scratch Assay"
+        "Robust quantitative scratch assay"
       ]
     },
     {
@@ -62,8 +62,8 @@
       "reciprocal_rank": 1.0,
       "top_3_retournes": [
         "Metrics for evaluating 3D medical image segmentation: analysis, selection, and tool",
-        "Embracing imperfect datasets: A review of deep learning solutions for medical image segmentation",
-        "A Robust Morphological Approach for Automated Segmentation and Quantification of Scratch Assay Micrographs"
+        "A Quantitative Comparison of Epistemic Uncertainty Maps Applied to Multi-Class Segmentation",
+        "Embracing imperfect datasets: A review of deep learning solutions for medical image segmentation"
       ]
     },
     {
@@ -88,13 +88,13 @@
       "titres_attendus": [
         "The In Vitro Wound‐Scratch Assay: Applications, Technical Advances, and Limitations in Wound Healing Research"
       ],
-      "rang_trouve": 7,
+      "rang_trouve": 8,
       "present_at_3": false,
-      "reciprocal_rank": 0.14285714285714285,
+      "reciprocal_rank": 0.125,
       "top_3_retournes": [
         "A Robust and Standardized Approach to Quantify Wound Closure Using the Scratch Assay",
         "AIM: A Computational Tool for the Automatic Quantification of Scratch Wound Healing Assays",
-        "An effective device to enable consistent scratches for in vitro scratch assays"
+        "Robust quantitative scratch assay"
       ]
     },
     {
@@ -125,7 +125,7 @@
       "top_3_retournes": [
         "An ImageJ plugin for the high throughput image analysis of in vitro scratch wound healing assays",
         "AIM: A Computational Tool for the Automatic Quantification of Scratch Wound Healing Assays",
-        "InVitroGap: an open-source tool for automated quantification of wound closure in the in vitro scratch assay"
+        "Robust quantitative scratch assay"
       ]
     },
     {
@@ -140,7 +140,7 @@
       "top_3_retournes": [
         "Embracing imperfect datasets: A review of deep learning solutions for medical image segmentation",
         "U-Net: Convolutional Networks for Biomedical Image Segmentation",
-        "TernausNet: U-Net with VGG11 Encoder Pre-Trained on ImageNet for Image Segmentation"
+        "Calibrating Ensembles for Scalable Uncertainty Quantification in Deep Learning-based Medical Segmentation"
       ]
     },
     {
@@ -188,6 +188,22 @@
         "An automated in vitro wound healing microscopy image analysis approach utilizing U-net-based deep learning methodology",
         "Study of Wound Healing Dynamics by Single Pseudo-Particle Tracking in Phase Contrast Images Acquired in Time-Lapse"
       ]
+    },
+    {
+      "categorie": "incertitude_confiance",
+      "question": "How can an ensemble of deep learning models provide a confidence or uncertainty estimate for a medical image segmentation?",
+      "titres_attendus": [
+        "Calibrating Ensembles for Scalable Uncertainty Quantification in Deep Learning-based Medical Segmentation",
+        "A Review of Uncertainty Estimation and its Application in Medical Imaging"
+      ],
+      "rang_trouve": 1,
+      "present_at_3": true,
+      "reciprocal_rank": 1.0,
+      "top_3_retournes": [
+        "Calibrating Ensembles for Scalable Uncertainty Quantification in Deep Learning-based Medical Segmentation",
+        "A Review of Uncertainty Estimation and its Application in Medical Imaging",
+        "A Quantitative Comparison of Epistemic Uncertainty Maps Applied to Multi-Class Segmentation"
+      ]
     }
   ],
   "reformulation_experiment": {
@@ -205,8 +221,8 @@
         "present_at_3_reformule": true,
         "top_3_retournes_reformule": [
           "An automated in vitro wound healing microscopy image analysis approach utilizing U-net-based deep learning methodology",
-          "An ImageJ plugin for the high throughput image analysis of in vitro scratch wound healing assays",
-          "DeepScratch: Single-cell based topological metrics of scratch wound assays"
+          "Virtually Objective Quantification of in vitro Wound Healing Scratch Assays with the Segment Anything Model",
+          "An ImageJ plugin for the high throughput image analysis of in vitro scratch wound healing assays"
         ]
       },
       {
@@ -214,20 +230,20 @@
         "question_originale": "Mon Dice de 0,882 est-il faible comparé à d'autres études U-Net sur scratch assay ?",
         "question_reformulee": "Coefficient de similarité de Dice (DSC) des modèles U-Net pour la segmentation d'images de scratch assay de cicatrisation, comparé aux outils ImageJ et TScratch",
         "rang_original": null,
-        "rang_reformule": 8,
+        "rang_reformule": 10,
         "present_at_3_original": false,
         "present_at_3_reformule": false,
         "top_3_retournes_reformule": [
           "A Robust Morphological Approach for Automated Segmentation and Quantification of Scratch Assay Micrographs",
-          "An ImageJ plugin for the high throughput image analysis of in vitro scratch wound healing assays",
-          "Scratch assay microscopy: A reaction–diffusion equation approach for common instruments and data"
+          "Robust quantitative scratch assay",
+          "An ImageJ plugin for the high throughput image analysis of in vitro scratch wound healing assays"
         ]
       },
       {
         "categorie": "scratch_assay_principles",
         "question_originale": "What are the limitations of the scratch assay for studying wound healing?",
         "question_reformulee": "In vitro wound-scratch assay: technical advances and limitations in wound healing research",
-        "rang_original": 7,
+        "rang_original": 8,
         "rang_reformule": 2,
         "present_at_3_original": false,
         "present_at_3_reformule": true,
@@ -254,10 +270,10 @@
     ]
   },
   "hybrid_experiment": {
-    "recall_at_k_embeddings": 0.6666666666666666,
-    "recall_at_k_hybride": 0.75,
-    "mrr_at_k_max_embeddings": 0.5257936507936508,
-    "mrr_at_k_max_hybride": 0.6396825396825396,
+    "recall_at_k_embeddings": 0.6923076923076923,
+    "recall_at_k_hybride": 0.6923076923076923,
+    "mrr_at_k_max_embeddings": 0.5608974358974359,
+    "mrr_at_k_max_hybride": 0.6571428571428571,
     "per_question_hybride": [
       {
         "categorie": "deep_learning_segmentation",
@@ -285,7 +301,7 @@
         "reciprocal_rank": 0.2,
         "top_3_retournes": [
           "An effective device to enable consistent scratches for in vitro scratch assays",
-          "An ImageJ plugin for the high throughput image analysis of in vitro scratch wound healing assays",
+          "Virtually Objective Quantification of in vitro Wound Healing Scratch Assays with the Segment Anything Model",
           "In vitro cell migration quantification method for scratch assays"
         ]
       },
@@ -327,13 +343,13 @@
           "Metrics for evaluating 3D medical image segmentation: analysis, selection, and tool",
           "Metrics reloaded: recommendations for image analysis validation"
         ],
-        "rang_trouve": 3,
-        "present_at_3": true,
-        "reciprocal_rank": 0.3333333333333333,
+        "rang_trouve": 5,
+        "present_at_3": false,
+        "reciprocal_rank": 0.2,
         "top_3_retournes": [
           "A novel method for evaluating and visualizing scratch wound healing assays using level-set and image sector analysis",
           "Modeling epithelial wound closure dynamics with AI: A comparative study across cell types",
-          "Metrics for evaluating 3D medical image segmentation: analysis, selection, and tool"
+          "A Quantitative Comparison of Epistemic Uncertainty Maps Applied to Multi-Class Segmentation"
         ]
       },
       {
@@ -347,8 +363,8 @@
         "reciprocal_rank": 1.0,
         "top_3_retournes": [
           "The In Vitro Wound‐Scratch Assay: Applications, Technical Advances, and Limitations in Wound Healing Research",
-          "Therapeutic candidates for keloid scars identified by qualitative review of scratch assay research for wound healing",
-          "AIM: A Computational Tool for the Automatic Quantification of Scratch Wound Healing Assays"
+          "AIM: A Computational Tool for the Automatic Quantification of Scratch Wound Healing Assays",
+          "Therapeutic candidates for keloid scars identified by qualitative review of scratch assay research for wound healing"
         ]
       },
       {
@@ -393,8 +409,8 @@
         "reciprocal_rank": 1.0,
         "top_3_retournes": [
           "Embracing imperfect datasets: A review of deep learning solutions for medical image segmentation",
-          "Comparative Study of Deep Transfer Learning Models for Semantic Segmentation of Human Mesenchymal Stem Cell Micrographs",
-          "U-Net: Convolutional Networks for Biomedical Image Segmentation"
+          "U-Net: Convolutional Networks for Biomedical Image Segmentation",
+          "Virtually Objective Quantification of in vitro Wound Healing Scratch Assays with the Segment Anything Model"
         ]
       },
       {
@@ -409,8 +425,8 @@
         "reciprocal_rank": 0.0,
         "top_3_retournes": [
           "AIM: A Computational Tool for the Automatic Quantification of Scratch Wound Healing Assays",
-          "Scratch assay microscopy: A reaction–diffusion equation approach for common instruments and data",
-          "An on-chip wound healing assay fabricated by xurography for evaluation of dermal fibroblast cell migration and wound closure"
+          "An on-chip wound healing assay fabricated by xurography for evaluation of dermal fibroblast cell migration and wound closure",
+          "Metrics for evaluating 3D medical image segmentation: analysis, selection, and tool"
         ]
       },
       {
@@ -440,7 +456,23 @@
         "top_3_retournes": [
           "Modeling epithelial wound closure dynamics with AI: A comparative study across cell types",
           "The In Vitro Wound‐Scratch Assay: Applications, Technical Advances, and Limitations in Wound Healing Research",
-          "Automated In Vitro Wound Healing Assay"
+          "A novel method for evaluating and visualizing scratch wound healing assays using level-set and image sector analysis"
+        ]
+      },
+      {
+        "categorie": "incertitude_confiance",
+        "question": "How can an ensemble of deep learning models provide a confidence or uncertainty estimate for a medical image segmentation?",
+        "titres_attendus": [
+          "Calibrating Ensembles for Scalable Uncertainty Quantification in Deep Learning-based Medical Segmentation",
+          "A Review of Uncertainty Estimation and its Application in Medical Imaging"
+        ],
+        "rang_trouve": 1,
+        "present_at_3": true,
+        "reciprocal_rank": 1.0,
+        "top_3_retournes": [
+          "Calibrating Ensembles for Scalable Uncertainty Quantification in Deep Learning-based Medical Segmentation",
+          "A Review of Uncertainty Estimation and its Application in Medical Imaging",
+          "Embracing imperfect datasets: A review of deep learning solutions for medical image segmentation"
         ]
       }
     ]
