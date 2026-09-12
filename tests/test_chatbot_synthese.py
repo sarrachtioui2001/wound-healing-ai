@@ -279,6 +279,33 @@ def test_nettoyer_placeholder_reouverture_inchange_sans_placeholder():
     assert nettoyer_placeholder_reouverture(texte) == texte
 
 
+def test_nettoyer_placeholder_reouverture_amorce_seule_bullet_isolee():
+    # Cas réel (2026-09-12) : le LLM écrit "Il n'y a" avant le placeholder, sur sa
+    # propre puce -- la retirer seule laissait "- Il n'y a" incomplet.
+    texte = (
+        "- Cette différence décrit uniquement les mesures disponibles.\n"
+        "- Il n'y a aucune réouverture observée sur les intervalles disponibles.\n"
+        "- Cette évolution globale sur peu de mesures ne permet pas de conclure."
+    )
+    resultat = nettoyer_placeholder_reouverture(texte)
+    assert "Il n'y a" not in resultat
+    assert "- Cette différence décrit uniquement les mesures disponibles." in resultat
+    assert "- Cette évolution globale sur peu de mesures ne permet pas de conclure." in resultat
+
+
+def test_nettoyer_placeholder_reouverture_amorce_et_chute_en_milieu_de_phrase():
+    # Cas réel (2026-09-12) : le LLM encadre le placeholder avec "et qu'" avant et
+    # "n'est détectée" après -- la retirer seule laissait "et qu'n'est détectée."
+    texte = (
+        "Il est nécessaire d'effectuer de nouvelles mesures pour confirmer ces résultats "
+        "et qu'aucune réouverture observée sur les intervalles disponibles n'est détectée."
+    )
+    resultat = nettoyer_placeholder_reouverture(texte)
+    assert "qu'n'est détectée" not in resultat
+    assert "et qu'" not in resultat
+    assert "pour confirmer ces résultats" in resultat
+
+
 def test_corriger_accord_conditions_biologiques_pluralise_celle_utilisee():
     texte = (
         "les conditions biologiques de ces travaux diffèrent de celle utilisée dans "

@@ -960,18 +960,29 @@ def _phrase_reouverture(intervalles: list[dict]) -> str:
 # partielle)" sur un jeu de mesures pourtant strictement décroissant). Voir chatbot_prompt_fragility,
 # mémoire projet. Corrigé à la place en code pur, sur le texte déjà généré : aucun risque de
 # fabrication puisque ça ne fait que supprimer une chaîne de caractères connue, jamais en ajouter.
+#
+# Le LLM ne recopie pas toujours le placeholder seul : il l'entoure parfois d'un
+# amorce ("Il n'y a...") et/ou d'une chute ("... n'est détectée") pour en faire sa
+# propre phrase. Le retirer seul laissait alors un fragment cassé en usage réel --
+# "- Il n'y a" (amorce sans chute, 2026-09-12) et "et qu'n'est détectée." (amorce
+# ET chute, 2026-09-12, voir chatbot_prompt_fragility en mémoire projet) : la regex
+# absorbe donc aussi ces tournures courantes autour du placeholder, pas seulement le
+# placeholder lui-même.
 _PLACEHOLDER_REOUVERTURE_RE = re.compile(
-    r"[ \t]*\(?\s*aucune r[ée]ouverture observ[ée]e sur les intervalles disponibles\s*\)?\.?",
+    r"[ \t]*(?:\b(?:il\s+n['’]y\s+a(?:\s+pas)?|et\s+qu['’]|sans\s+qu['’]|de\s+plus,?)\s*)?"
+    r"\(?\s*aucune r[ée]ouverture observ[ée]e sur les intervalles disponibles\s*\)?"
+    r"(?:\s*n['’]est\s+(?:pas\s+)?d[ée]tect[ée]e?)?"
+    r"\.?",
     re.IGNORECASE,
 )
 
 
 def nettoyer_placeholder_reouverture(texte: str) -> str:
     """Retire toute recopie littérale (avec ou sans parenthèses, en phrase autonome ou en
-    milieu de paragraphe) du placeholder "aucune réouverture observée..." que le LLM peut
-    laisser fuiter dans le résumé final -- ce texte est destiné au prompt uniquement, jamais
-    à l'affichage. Ne modifie rien d'autre : si le placeholder n'apparaît pas dans `texte`,
-    le retourne inchangé."""
+    milieu de paragraphe, avec ou sans amorce/chute ajoutée par le LLM) du placeholder
+    "aucune réouverture observée..." que le LLM peut laisser fuiter dans le résumé final --
+    ce texte est destiné au prompt uniquement, jamais à l'affichage. Ne modifie rien
+    d'autre : si le placeholder n'apparaît pas dans `texte`, le retourne inchangé."""
     if "aucune réouverture" not in texte.lower() and "aucune reouverture" not in texte.lower():
         return texte
     texte = _PLACEHOLDER_REOUVERTURE_RE.sub("", texte)
