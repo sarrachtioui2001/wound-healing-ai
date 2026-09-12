@@ -231,7 +231,11 @@ def _stream_ollama(prompt: str):
 # Ordinaux français utilisés pour désigner un article par sa position plutôt que par son
 # titre ("le premier article", "le second article"...) -- interdit depuis l'origine du
 # prompt (PROMPT_CONTEXTE) mais contourné par le LLM de temps à autre en usage réel
-# (2026-09-10). Index = position dans `sources` (même ordre que dans _intro_articles /
+# (2026-09-10). Couvre aussi "la première étude"/"la seconde étude" (synonyme d'"article"
+# employé par mistral, jamais couvert jusqu'ici -- trouvé par l'isolation test du
+# PROMPT_CONTEXTE reformulé le 2026-09-11, voir chatbot_prompt_fragility en mémoire projet ;
+# le trou existait déjà avec l'ancien prompt, simplement jamais exercé par les isolation
+# tests précédents). Index = position dans `sources` (même ordre que dans _intro_articles /
 # _format_contexte).
 _ORDINAUX_ARTICLE = {
     "premier": 0, "premiere": 0, "première": 0,
@@ -240,15 +244,15 @@ _ORDINAUX_ARTICLE = {
     "quatrieme": 3, "quatrième": 3,
 }
 _REF_ORDINALE_RE = re.compile(
-    r"\ble\s+(premi[eè]re?|deuxi[eè]me|second[e]?|troisi[eè]me|quatri[eè]me)\s+articles?\b",
+    r"\b(?:le|la)\s+(premi[eè]re?|deuxi[eè]me|second[e]?|troisi[eè]me|quatri[eè]me)\s+(?:articles?|[ée]tudes?)\b",
     re.IGNORECASE,
 )
 
 
 def corriger_references_ordinales(texte: str, sources: list[str]) -> str:
-    """Remplace après coup "le premier/second/troisième article" par son vrai titre
-    entre guillemets, dans l'ordre où les articles ont été présentés au LLM (même
-    ordre que `sources`).
+    """Remplace après coup "le premier/second/troisième article" (ou "étude", synonyme
+    parfois employé à la place) par son vrai titre entre guillemets, dans l'ordre où les
+    articles ont été présentés au LLM (même ordre que `sources`).
 
     Constaté en usage réel (2026-09-10, retour biologiste) : PROMPT_CONTEXTE
     interdit explicitement de citer un article par sa position depuis son origine,
@@ -274,6 +278,56 @@ def corriger_references_ordinales(texte: str, sources: list[str]) -> str:
         return remplacement
 
     return _REF_ORDINALE_RE.sub(_remplacement, texte)
+
+
+# Correction après coup de la longueur du paragraphe "Mise en contexte scientifique" :
+# PROMPT_CONTEXTE exige "EXACTEMENT 3 phrases", mais mistral 7B dépasse cette limite dans
+# environ 1/3 des générations (jusqu'à 5 phrases observées en usage réel, 2026-09-11). Deux
+# reformulations du prompt ont été testées en isolation pour éliminer ce dépassement -- l'une
+# n'a rien amélioré, l'autre a réintroduit une généralisation biologique non garantie
+# ("comportement coordonné des cellules") pire que le problème visé (voir
+# chatbot_prompt_fragility, mémoire projet). Corrigé à la place en code pur, sur le même
+# principe que corriger_references_ordinales ci-dessus : jamais de fabrication à corriger ici
+# (juste une longueur), donc aucun risque de régression sur les sections numériques.
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+# "compar" n'apparaît légitimement que dans la phrase de clôture obligatoire du prompt ("ne
+# sont pas directement comparables..."), puisque le prompt interdit explicitement toute
+# comparaison ailleurs dans le paragraphe -- un simple test de sous-chaîne suffit donc à la
+# repérer de façon fiable, sans dépendre d'une formulation exacte.
+_MOT_COMPARAISON_RE = re.compile(r"compar", re.IGNORECASE)
+_MOT_DIFFERENCE_RE = re.compile(
+    r"(protocole|conditions? biologiques?|syst[eè]me[s]? d'imagerie|m[eé]thodes? de quantification).{0,60}diff[ée]r",
+    re.IGNORECASE,
+)
+
+
+def limiter_paragraphe_contexte(texte: str, max_intro: int = 2) -> str:
+    """Réduit le paragraphe "Mise en contexte scientifique" à 3 phrases au maximum,
+    en conservant TOUJOURS la phrase de clôture (non-comparabilité) plutôt que de
+    tronquer aveuglément aux 3 premières phrases -- une simple troncature couperait
+    la phrase la plus importante du paragraphe (celle qui prévient toute
+    surinterprétation) si elle arrive en 4e ou 5e position.
+
+    Ne modifie rien si le paragraphe fait déjà 3 phrases ou moins, ou si aucune
+    phrase de clôture reconnaissable n'est trouvée (dans ce cas, tronque aux 3
+    premières phrases plutôt que de risquer de perdre la conclusion)."""
+    phrases = [p for p in _SENTENCE_SPLIT_RE.split(texte.strip()) if p]
+    if len(phrases) <= 3:
+        return texte
+
+    idx_cloture = next((i for i, p in enumerate(phrases) if _MOT_COMPARAISON_RE.search(p)), None)
+    if idx_cloture is None:
+        return " ".join(phrases[:3])
+
+    # La phrase de clôture est parfois précédée d'une phrase séparée qui énonce la
+    # différence de protocole/conditions avant la conclusion "donc non comparable" :
+    # les deux sont alors gardées ensemble plutôt que de couper cette liaison.
+    if idx_cloture > 0 and _MOT_DIFFERENCE_RE.search(phrases[idx_cloture - 1]):
+        idx_cloture -= 1
+
+    intro = phrases[:min(max_intro, idx_cloture)]
+    cloture = phrases[idx_cloture:]
+    return " ".join(intro + cloture)
 
 
 # Repère les citations entre guillemets (français « » ou droits/courbes "..."/"...")
@@ -508,9 +562,49 @@ taux moyens entre intervalles peut être mentionnée (jamais qu'un taux "accél�
 # chatbot_prompt_fragility en mémoire projet et "Fiabilité de la génération par LLM" dans le
 # README). PROMPT_CONTEXTE ne reçoit jamais aucune mesure : la contamination croisée devient
 # structurellement impossible, pas seulement évitée par une consigne de prompt.
+#
+# Reformulé le 2026-09-11 (voir chatbot_prompt_fragility, mémoire projet) : l'ancienne version
+# autorisait explicitement une branche "le corpus ne permet pas de mettre en contexte" -- inutile
+# en pratique puisque le corpus est curé spécifiquement sur le scratch assay, donc les articles
+# retournés éclairent toujours au moins la problématique générale. Isolation-testée (3 générations,
+# ancien vs nouveau prompt) : l'ancien a violé sa propre limite de "3 phrases maximum" sur 3/3
+# générations et a cité une étude par position ("la première étude...") sur 1/3 malgré la
+# consigne ; le nouveau (limite reformulée en "EXACTEMENT 3 phrases" + interdiction explicite de
+# citer par année/position ajoutée en tête) obtient 2/3 générations parfaites et 1/3 à 4 phrases
+# (sans aucune régression de fond) -- gardé.
+#
+# Renforcé une seconde fois le 2026-09-11, même session : un second lot de 3 générations en
+# production a montré 3/3 dépassements sévères de la limite de 3 phrases ET 3/3 généralisations
+# biologiques non garanties par de simples résumés d'articles ("directionnalité des cellules et
+# coordination entre elles" présentée comme un fait établi) -- risque relevé par un relecteur
+# externe : ce paragraphe peut laisser croire que l'expérience mesure la trajectoire/directionnalité
+# cellulaire, alors qu'elle ne mesure que la surface de la plaie. Isolation-testée (3 vs 3, prompt
+# ci-dessus vs candidat ajoutant une consigne de périmètre explicite + reformulant le point 1 pour
+# décrire ce que les articles PROPOSENT plutôt que ce qu'ils "établissent" comme fait général) : le
+# candidat obtient 2/3 générations propres contre 0/3 pour la version précédente sur ce lot ; 1/3
+# génération du candidat reste imparfaite (plusieurs paragraphes + re-citation des titres complets)
+# mais reproduit quasi mot pour mot la phrase de périmètre demandée. Gardé : amélioration nette sur
+# le défaut ciblé, aucune régression nouvelle par rapport aux défauts déjà connus.
+#
+# Renforcé une troisième fois le 2026-09-12 (retour utilisateur : le paragraphe décrit les
+# articles mais ne dit jamais explicitement pourquoi ils sont pertinents POUR cette analyse-ci --
+# lu comme "générique" en usage réel). Point 1 modifié pour exiger que l'unique phrase générale se
+# termine par une précision du type "ces travaux apportent un contexte méthodologique à l'analyse
+# réalisée ici" (formulation libre, jamais quantitative). Isolation-testée (3 vs 3, avec le même
+# contexte réel -- retrieval hybride, 3 articles de la catégorie analyse_temporelle) : sur la
+# baseline, 1/3 génération contournait la règle "jamais d'année/position" via un tour de phrase non
+# couvert par corriger_references_ordinales ("En premier, un article de 2021 propose..." -- pas
+# "le premier article", donc jamais intercepté après coup), et aucune des 3 ne reliait
+# explicitement le contexte à l'analyse en cours (lu comme trop générique, cohérent avec le retour
+# utilisateur). Le candidat : 3/3 propres après le même post-traitement de troncature
+# (limiter_paragraphe_contexte), 3/3 relient explicitement la littérature à "cette
+# expérience"/"l'analyse réalisée ici" dès la phrase d'ouverture ou la 2e phrase (donc conservé même
+# après troncature à 3 phrases), 0/3 mention d'année ou de position. Gardé : améliore l'objectif visé
+# et n'introduit aucune régression -- au contraire, n'a pas reproduit le défaut de citation par année
+# observé sur la baseline dans ce même lot.
 PROMPT_CONTEXTE = """Tu es un assistant scientifique qui rédige la mise en contexte \
 bibliographique d'un résumé d'expérience de cicatrisation de plaie (wound healing / scratch \
-assay), à partir d'extraits d'articles déjà sélectionnés pour leur pertinence.
+assay), à partir d'extraits d'articles déjà sélectionnés pour leur pertinence au domaine.
 
 Extraits d'articles scientifiques pertinents :
 {contexte}
@@ -520,30 +614,47 @@ Les titres de ces articles sont déjà affichés au lecteur juste avant ton para
 titre entre guillemets, jamais "le premier article", jamais "l'article de [année]", jamais
 "Titre 1"/"Titre 2"/"(Titre 1 et 2)"/"(Titre 1 à 3)" ni aucune autre référence par numéro ou
 position) — ton paragraphe ne parle que de CE QU'ils établissent, jamais de leur identité ni de
-leur rang, déjà connus du lecteur.
+leur rang, déjà connus du lecteur. Ne mentionne JAMAIS une année (2021, 2023, 2025...) ni un ordre
+("le premier", "le second", "l'étude suivante") pour désigner un article ou une étude précise :
+dis uniquement CE QUE les extraits montrent ENSEMBLE, jamais QUAND ni COMBIENTIÈME un point
+précis a été montré.
 
-Rédige un paragraphe COURT, 3 phrases MAXIMUM au total (jamais plus, même si plusieurs extraits \
-sont pertinents) — PAS une phrase ni un paragraphe par article, ce paragraphe reste une synthèse \
-groupée, jamais une revue de littérature détaillée :
-- Si un ou plusieurs extraits ci-dessus apportent un éclairage pertinent, résume en bloc ce qu'ils
-  établissent concrètement ensemble (méthode d'imagerie quantitative, mécanisme de migration
-  cellulaire, intérêt d'un suivi temporel de la fermeture...) — dis CE QU'ils établissent, pas
-  seulement QU'ils existent, et ne détaille jamais leur méthodologie article par article. Jamais de
-  lien ni d'URL (les extraits n'en fournissent pas).
-- N'affirme JAMAIS qu'un résultat est "conforme à la littérature", "en accord avec les études", un
-  "résultat normal", ou que les extraits "confirment" quoi que ce soit : les extraits sont en
-  général des résumés généraux, pas des points de comparaison chiffrés dans des conditions
-  comparables.
-- Termine TOUJOURS par une phrase disant explicitement que ces travaux ne fournissent pas de
-  valeur de référence directement comparable à cette expérience précise (protocole, système
-  d'imagerie et conditions biologiques différents), et que toute mesure obtenue par ailleurs décrit
-  sa propre série expérimentale, pas une comparaison à une cinétique biologique universelle.
-- Si aucun extrait ci-dessus n'apporte d'éclairage réellement pertinent, écris-le explicitement en
-  une phrase (ex : "le corpus documentaire disponible ne permet pas de mettre ces résultats en
-  contexte de façon pertinente ici") plutôt que de forcer un lien approximatif avec un article qui
-  ne correspond pas — dans ce cas, le paragraphe entier ne fait qu'une phrase.
-- Tu n'as accès à aucune mesure de surface, de fermeture ni de vitesse : n'en mentionne ni n'en
-  invente aucune, ce paragraphe ne parle que de ce que montrent les extraits ci-dessus.
+Cette expérience mesure UNIQUEMENT la surface de la zone de plaie et son évolution temporelle
+(fermeture, vitesse) : ne laisse JAMAIS entendre qu'elle mesure aussi la trajectoire, la vitesse
+individuelle ou la directionnalité des cellules, même si les extraits ci-dessous en parlent — ce
+sont des grandeurs propres à ces publications, pas à cette expérience.
+
+Rédige un paragraphe COURT, EXACTEMENT 3 phrases au total, pas une de plus (même si plusieurs
+extraits sont pertinents ou te semblent mériter un développement) — PAS une phrase ni un
+paragraphe par article, ce paragraphe reste une synthèse groupée en 3 phrases seulement, jamais
+une revue de littérature détaillée article par article, en suivant ces 3 phrases dans cet ordre :
+1. Résume en UNE SEULE phrase (quitte à la construire en deux propositions reliées par une
+   virgule ou "ainsi") ce que les extraits ci-dessus apportent à la compréhension GÉNÉRALE du
+   scratch assay (intérêt de l'imagerie quantitative et de l'analyse temporelle pour caractériser
+   la fermeture de la plaie et la migration cellulaire), en terminant cette même phrase par une
+   précision du type "ces travaux apportent ainsi un contexte méthodologique à l'analyse réalisée
+   ici" (formulation libre, mais sans jamais affirmer une concordance, une validation ou une
+   comparaison chiffrée d'un résultat précis — ce lien reste uniquement méthodologique/thématique,
+   jamais quantitatif) — décris CE QUE ces travaux PROPOSENT comme méthode ou objectif, jamais une
+   conclusion biologique précise ("les cellules migrent de façon coordonnée", "leur mouvement est
+   corrélé dans le temps"...) comme un fait général acquis : une méthode ou un objectif d'étude
+   peut être résumé sans généraliser ses résultats spécifiques. Ces extraits ont déjà été
+   sélectionnés pour leur rapport avec le scratch assay : n'écris JAMAIS qu'ils "ne sont pas
+   pertinents" ou que le corpus "ne permet pas de contexte" — situe toujours, au minimum, la
+   problématique générale qu'ils éclairent. Jamais de lien ni d'URL, jamais de détail
+   méthodologique article par article.
+2. N'affirme JAMAIS qu'un résultat de l'expérience (surface, %, vitesse) est "conforme à la
+   littérature", "en accord avec les études", un "résultat normal", ou que les extraits le
+   "confirment" : ne compare JAMAIS un chiffre de l'expérience à un chiffre lu dans un extrait,
+   même approximativement. Tu n'as accès à aucune mesure de surface, de fermeture ni de vitesse :
+   n'en mentionne ni n'en invente aucune, ce paragraphe ne parle que de ce que montrent les
+   extraits ci-dessus.
+3. Termine TOUJOURS par une phrase disant explicitement que le protocole, le système d'imagerie,
+   les méthodes de quantification et les conditions biologiques de ces travaux diffèrent de cette
+   expérience précise, et que les résultats obtenus ici ne sont donc pas directement comparables
+   quantitativement à ceux rapportés dans ces publications.
+
+N'invente jamais un mécanisme, une méthode ou un résultat absent des extraits ci-dessus.
 """
 
 
@@ -686,6 +797,44 @@ def _phrase_heterogeneite(synthese: dict, intervalles: list[dict]) -> str:
     )
 
 
+def _phrase_liaison_resultats(synthese: dict, intervalles: list[dict]) -> str:
+    """Phrase factuelle pré-composée en Python (jamais vue par le LLM), reliant le
+    résultat chiffré de l'utilisateur au paragraphe "Mise en contexte scientifique"
+    généré par PROMPT_CONTEXTE -- ajoutée APRÈS ce paragraphe, jamais à l'intérieur
+    de son prompt.
+
+    PROMPT_CONTEXTE reste structurellement aveugle aux mesures (voir sa docstring
+    et chatbot_prompt_fragility, mémoire projet) : lui donner ces chiffres pour
+    qu'il les intègre à sa prose reproduirait le mécanisme de fabrication déjà
+    mesuré ailleurs dans ce projet (3/3 vitesses fabriquées quand mesures et
+    contexte partageaient un seul appel). Cette phrase permet quand même au
+    biologiste de relier ses résultats à la littérature qui précède, sans jamais
+    exposer un seul chiffre à la génération libre du modèle."""
+    t0, t_final = synthese["t0"], synthese["t_final"]
+    base = (
+        f"Dans les données analysées ici, la fermeture mesurée est de "
+        f"{_fr(synthese['fermeture_finale_pct'])}% entre {_fr(t0['time_h'])}h et "
+        f"{_fr(t_final['time_h'])}h"
+    )
+    if len(intervalles) < 2:
+        return base + "."
+
+    plus_rapide = max(intervalles, key=lambda iv: iv["vitesse_pct_h"])
+    plus_lent = min(intervalles, key=lambda iv: iv["vitesse_pct_h"])
+    if plus_rapide is plus_lent:
+        return base + "."
+
+    return (
+        base + ", avec un taux estimé plus élevé sur l'intervalle "
+        f"{_fr(plus_rapide['t_debut'])}h-{_fr(plus_rapide['t_fin'])}h "
+        f"({_fr(plus_rapide['vitesse_pct_h'])}%/h) que sur l'intervalle "
+        f"{_fr(plus_lent['t_debut'])}h-{_fr(plus_lent['t_fin'])}h "
+        f"({_fr(plus_lent['vitesse_pct_h'])}%/h). Cette observation décrit uniquement "
+        "les mesures disponibles, sans permettre à elle seule de conclure à une "
+        "accélération biologique de la cicatrisation."
+    )
+
+
 def _phrase_interpretation(intervalles: list[dict]) -> str:
     """Phrase toute faite pour "Interprétation prudente", composée dans le code
     plutôt que laissée au LLM remplir un patron à trous. Constaté en pratique
@@ -738,6 +887,42 @@ def _phrase_reouverture(intervalles: list[dict]) -> str:
         "une variation de mesure (segmentation, éclairage) : ce résumé ne permet pas de trancher, "
         "une vérification de l'image concernée est recommandée."
     )
+
+
+# Correction après coup du placeholder "(aucune réouverture observée sur les intervalles
+# disponibles)" que PROMPT_RAPPORT injecte pour signaler au LLM qu'il n'y a rien à ajouter sur
+# ce point -- mistral 7B le recopie littéralement dans "Interprétation prudente" au lieu de
+# l'ignorer (observé en usage réel, 2026-09-11 : 2/3 générations sur le cas sans réouverture).
+# Deux corrections de prompt ont été testées en isolation et rejetées : renforcer la consigne
+# ("ne la reprends pas") n'a rien amélioré (3/3 recopient encore) ; omettre le bloc entier du
+# prompt quand il n'y a rien à signaler a provoqué une régression bien pire -- 2/3 générations
+# ont alors FABRIQUÉ une réouverture inexistante ("la surface non colonisée a augmenté (réouverture
+# partielle)" sur un jeu de mesures pourtant strictement décroissant). Voir chatbot_prompt_fragility,
+# mémoire projet. Corrigé à la place en code pur, sur le texte déjà généré : aucun risque de
+# fabrication puisque ça ne fait que supprimer une chaîne de caractères connue, jamais en ajouter.
+_PLACEHOLDER_REOUVERTURE_RE = re.compile(
+    r"[ \t]*\(?\s*aucune r[ée]ouverture observ[ée]e sur les intervalles disponibles\s*\)?\.?",
+    re.IGNORECASE,
+)
+
+
+def nettoyer_placeholder_reouverture(texte: str) -> str:
+    """Retire toute recopie littérale (avec ou sans parenthèses, en phrase autonome ou en
+    milieu de paragraphe) du placeholder "aucune réouverture observée..." que le LLM peut
+    laisser fuiter dans le résumé final -- ce texte est destiné au prompt uniquement, jamais
+    à l'affichage. Ne modifie rien d'autre : si le placeholder n'apparaît pas dans `texte`,
+    le retourne inchangé."""
+    if "aucune réouverture" not in texte.lower() and "aucune reouverture" not in texte.lower():
+        return texte
+    texte = _PLACEHOLDER_REOUVERTURE_RE.sub("", texte)
+    # Ligne devenue une puce vide (ne contenait que le placeholder).
+    texte = re.sub(r"(?m)^[ \t]*-[ \t]*$\n?", "", texte)
+    # Espace résiduel laissé par une suppression en milieu de phrase ou en fin de ligne.
+    texte = re.sub(r"[ \t]{2,}", " ", texte)
+    texte = re.sub(r"[ \t]+\n", "\n", texte)
+    # Sauts de ligne excédentaires laissés par la puce supprimée (au plus un paragraphe vide).
+    texte = re.sub(r"\n{3,}", "\n\n", texte)
+    return texte.strip()
 
 
 def generer_resume_stream(rows: list[dict], n_articles: int = 3):
@@ -813,7 +998,18 @@ def generer_resume_stream(rows: list[dict], n_articles: int = 3):
         # Appel séparé, lancé seulement une fois le premier flux épuisé : ce prompt
         # ne contient aucune mesure (voir PROMPT_CONTEXTE), donc rien de ce résumé
         # numérique ne peut être contaminé par la génération de cette section.
-        yield from _stream_ollama(prompt_contexte)
+        #
+        # Accumulé en un seul bloc plutôt que streamé morceau par morceau (contrairement
+        # au reste du résumé) : limiter_paragraphe_contexte a besoin du paragraphe complet
+        # pour repérer et préserver la phrase de clôture avant de tronquer le surplus (voir
+        # sa docstring) -- coût UX mineur (cette section apparaît d'un bloc au lieu de mot
+        # à mot), accepté au profit d'une longueur fiable.
+        texte_contexte = "".join(_stream_ollama(prompt_contexte))
+        yield limiter_paragraphe_contexte(texte_contexte)
+        # Phrase numérique ajoutée APRÈS le paragraphe du LLM, jamais dans son
+        # prompt (voir _phrase_liaison_resultats) : relie le résultat mesuré à la
+        # littérature qui précède sans jamais exposer un chiffre à la génération.
+        yield " " + _phrase_liaison_resultats(synthese, intervalles)
 
     return flux(), [a["titre"] for a in articles]
 
