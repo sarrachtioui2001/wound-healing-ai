@@ -42,9 +42,13 @@ from metrics import confusion_counts, dice_score, iou_score
 from predict import draw_contour_overlay, load_model, predict_mask
 from preprocess import clean_image
 from chatbot import (
+    _calculer_intervalles,
+    corriger_accord_conditions_biologiques,
     corriger_references_ordinales,
     detecter_citations_suspectes,
+    detecter_contradiction_reouverture,
     generer_resume_stream,
+    nettoyer_placeholder_reouverture,
     repondre_stream,
 )
 
@@ -290,6 +294,21 @@ def afficher_citations_suspectes(citations_suspectes):
             "⚠️ Citation(s) potentiellement inventée(s) — absente(s) des sources listées "
             "ci-dessous, à vérifier avant réutilisation : "
             + ", ".join(f"« {c} »" for c in citations_suspectes)
+        )
+
+
+def afficher_contradiction_reouverture(contradiction_detectee: bool):
+    """Avertissement affiché quand le résumé affirme que la surface non colonisée /
+    la plaie "a augmenté" alors qu'aucune réouverture réelle n'est présente dans les
+    mesures (détection purement programmatique après génération, voir
+    chatbot.detecter_contradiction_reouverture -- observé en usage réel 2026-09-12 :
+    le LLM a écrit une contradiction factuelle avec des mesures pourtant en
+    fermeture continue)."""
+    if contradiction_detectee:
+        st.warning(
+            "⚠️ Le résumé semble affirmer une augmentation de la surface non colonisée "
+            "alors qu'aucune réouverture n'est présente dans les mesures — à vérifier "
+            "avant réutilisation."
         )
 
 
@@ -869,13 +888,20 @@ with tab_kinetics:
                             morceaux, sources = generer_resume_stream(rows)
                             resume = "".join(morceaux)
                         resume = corriger_references_ordinales(resume, sources)
+                        resume = nettoyer_placeholder_reouverture(resume)
+                        resume = corriger_accord_conditions_biologiques(resume)
                         citations_suspectes = detecter_citations_suspectes(resume, sources)
+                        contradiction_reouverture = detecter_contradiction_reouverture(
+                            resume, _calculer_intervalles(rows)
+                        )
                         st.write(resume)
                         if sources:
                             st.caption("Sources : " + ", ".join(sources))
                         afficher_citations_suspectes(citations_suspectes)
+                        afficher_contradiction_reouverture(contradiction_reouverture)
                         st.session_state["kinetics_resume"] = {
                             "texte": resume, "sources": sources, "citations_suspectes": citations_suspectes,
+                            "contradiction_reouverture": contradiction_reouverture,
                         }
                     except RuntimeError as exc:
                         st.error(str(exc))
@@ -885,6 +911,9 @@ with tab_kinetics:
                     if sources:
                         st.caption("Sources : " + ", ".join(sources))
                     afficher_citations_suspectes(st.session_state["kinetics_resume"].get("citations_suspectes"))
+                    afficher_contradiction_reouverture(
+                        st.session_state["kinetics_resume"].get("contradiction_reouverture")
+                    )
 
             with st.container(border=True):
                 st.subheader("💬 Poser une question sur ce résultat")

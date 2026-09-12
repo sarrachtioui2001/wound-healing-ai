@@ -17,6 +17,10 @@ from chatbot import (
     _phrase_heterogeneite,
     _phrase_interpretation,
     _phrase_reouverture,
+    corriger_accord_conditions_biologiques,
+    detecter_contradiction_reouverture,
+    limiter_paragraphe_contexte,
+    nettoyer_placeholder_reouverture,
 )
 
 ROWS = [
@@ -148,3 +152,171 @@ def test_phrase_interpretation_sans_reouverture_ne_fabrique_pas_de_signe():
 def test_phrase_interpretation_absente_avec_un_seul_intervalle():
     phrase = _phrase_interpretation(_calculer_intervalles(ROWS[:2]))
     assert phrase.startswith("(")
+
+
+# Paragraphes réels observés en usage (2026-09-11) ou lors des isolation tests de
+# PROMPT_CONTEXTE, dépassant la limite de "3 phrases" que le prompt seul n'a pas réussi à
+# faire respecter de façon fiable (voir chatbot_prompt_fragility, mémoire projet).
+PARAGRAPHE_5_PHRASES = (
+    "Les articles considérés proposent des méthodes innovantes pour étudier les déplacements "
+    "cellulaires lors de l'expérience de cicatrisation de plaie connue sous le nom de scratch "
+    "assay. En utilisant des techniques d'imagerie quantitative et de suivi temporel, ils "
+    "cherchent à caractériser la fermeture de la plaie et analyser la migration cellulaire. Ils "
+    "proposent différentes approches, telles que la détection du bord de plaie par segmentation "
+    "au niveau de contours et l'analyse de la migration en secteurs. Ces travaux montrent "
+    "l'intérêt d'une approche quantitative et temporelle pour l'étude de la cicatrisation de "
+    "plaie, mais les conditions biologiques, le système d'imagerie et les méthodes de "
+    "quantification de ces travaux diffèrent de celles de notre expérience précise. Les "
+    "résultats obtenus ici ne peuvent donc pas être directement comparés à ceux rapportés dans "
+    "ces publications."
+)
+
+PARAGRAPHE_4_PHRASES = (
+    "Les extraits fournis apportent un intérêt à l'imagerie quantitative et à l'analyse "
+    "temporelle pour caractériser la fermeture de la plaie et la migration cellulaire dans le "
+    "scratch assay. Ils proposent des méthodes originales pour extraire des trajectoires "
+    "décrivant les dynamics de la fermeture de la plaie. En effet, ils utilisent des méthodes "
+    "telles que le tracking de particules pseudo, la segmentation d'images à niveau de contour "
+    "et le partage de l'image en secteurs pour décrire les migrations cellulaires dans le temps. "
+    "Cependant, ces travaux étant effectués sous des conditions biologiques et technologiques "
+    "différentes de l'expérience en cours, les résultats obtenus ne peuvent être directement "
+    "comparés quantitativement."
+)
+
+PARAGRAPHE_3_PHRASES = (
+    "Le travail présenté dans ces articles illustre l'intérêt d'utiliser des images "
+    "quantitatives et une analyse temporelle pour caractériser la fermeture de la plaie et la "
+    "migration cellulaire dans le scratch assay. Ils proposent des méthodes originales pour "
+    "extraire des trajectoires de migration cellulaire et pour décrire la dynamique de la "
+    "fermeture de la plaie. Toutefois, il est important de souligner que ces études ont été "
+    "réalisées avec des systèmes d'imagerie, des méthodes de quantification et des conditions "
+    "biologiques différentes de celles qui seront utilisées dans cette expérience, et donc que "
+    "les résultats obtenus ici ne sont pas directement comparables à ceux rapportés dans ces "
+    "publications."
+)
+
+
+def _compter_phrases(texte: str) -> int:
+    import re
+    return len([p for p in re.split(r"(?<=[.!?])\s+", texte.strip()) if p])
+
+
+def test_limiter_paragraphe_contexte_reduit_5_phrases_a_3_en_gardant_la_cloture():
+    resultat = limiter_paragraphe_contexte(PARAGRAPHE_5_PHRASES)
+    assert _compter_phrases(resultat) == 3
+    assert resultat.endswith(
+        "Les résultats obtenus ici ne peuvent donc pas être directement comparés à ceux "
+        "rapportés dans ces publications."
+    )
+    # La phrase intermédiaire (détail des méthodes) doit avoir disparu, pas les deux premières.
+    assert "détection du bord de plaie par segmentation" not in resultat
+    assert resultat.startswith("Les articles considérés proposent des méthodes innovantes")
+
+
+def test_limiter_paragraphe_contexte_reduit_4_phrases_a_3_en_fusionnant_la_cloture():
+    resultat = limiter_paragraphe_contexte(PARAGRAPHE_4_PHRASES)
+    assert _compter_phrases(resultat) == 3
+    assert "ne peuvent être directement comparés quantitativement" in resultat
+    assert "tracking de particules pseudo" not in resultat
+
+
+def test_limiter_paragraphe_contexte_ne_touche_pas_un_paragraphe_deja_conforme():
+    assert limiter_paragraphe_contexte(PARAGRAPHE_3_PHRASES) == PARAGRAPHE_3_PHRASES
+
+
+def test_limiter_paragraphe_contexte_tronque_sans_phrase_de_cloture_reconnaissable():
+    texte = "Phrase un. Phrase deux. Phrase trois. Phrase quatre sans mot clé pertinent."
+    resultat = limiter_paragraphe_contexte(texte)
+    assert _compter_phrases(resultat) == 3
+    assert resultat == "Phrase un. Phrase deux. Phrase trois."
+
+
+# Variantes réelles du placeholder "(aucune réouverture observée...)" observées en usage
+# (2026-09-11) fuitant dans "Interprétation prudente" -- voir chatbot_prompt_fragility, mémoire
+# projet : deux corrections de PROMPT_RAPPORT ont été testées et rejetées (l'une n'a rien
+# amélioré, l'autre a fait fabriquer une réouverture inexistante), la correction retenue est
+# uniquement ce nettoyage après coup, sur le texte déjà généré.
+def test_nettoyer_placeholder_reouverture_puce_isolee_entre_parentheses():
+    texte = (
+        "**Interprétation prudente**\n- Le taux moyen de fermeture ... cicatrisation.\n\n"
+        "- (aucune réouverture observée sur les intervalles disponibles)\n\n"
+        "Ce résumé décrit une évolution globale sur peu de mesures, pas une cinétique fine."
+    )
+    resultat = nettoyer_placeholder_reouverture(texte)
+    assert "réouverture" not in resultat.lower()
+    assert "Ce résumé décrit une évolution globale" in resultat
+    assert "\n\n\n" not in resultat
+
+
+def test_nettoyer_placeholder_reouverture_phrase_en_milieu_de_paragraphe():
+    texte = (
+        "Cette différence décrit uniquement les mesures disponibles et ne permet pas, à elle "
+        "seule, de conclure à une accélération biologique de la cicatrisation. Aucune "
+        "réouverture observée sur les intervalles disponibles. Ce résumé décrit une évolution "
+        "globale sur peu de mesures, pas une cinétique fine."
+    )
+    resultat = nettoyer_placeholder_reouverture(texte)
+    assert "réouverture" not in resultat.lower()
+    assert "  " not in resultat
+    assert resultat == (
+        "Cette différence décrit uniquement les mesures disponibles et ne permet pas, à elle "
+        "seule, de conclure à une accélération biologique de la cicatrisation. Ce résumé décrit "
+        "une évolution globale sur peu de mesures, pas une cinétique fine."
+    )
+
+
+def test_nettoyer_placeholder_reouverture_ne_touche_pas_une_vraie_reouverture():
+    texte = (
+        "Réouverture partielle détectée sur les mesures disponibles : la surface non colonisée "
+        "a augmenté de 19,9 points de % entre 24h et 48h. Cela peut correspondre à un vrai "
+        "phénomène biologique."
+    )
+    assert nettoyer_placeholder_reouverture(texte) == texte
+
+
+def test_nettoyer_placeholder_reouverture_inchange_sans_placeholder():
+    texte = "Un résumé quelconque sans aucun rapport avec une réouverture de plaie."
+    assert nettoyer_placeholder_reouverture(texte) == texte
+
+
+def test_corriger_accord_conditions_biologiques_pluralise_celle_utilisee():
+    texte = (
+        "les conditions biologiques de ces travaux diffèrent de celle utilisée dans "
+        "cette expérience, et que les résultats obtenus ici ne sont donc pas comparables."
+    )
+    resultat = corriger_accord_conditions_biologiques(texte)
+    assert "celles utilisées" in resultat
+    assert "celle utilisée" not in resultat
+
+
+def test_corriger_accord_conditions_biologiques_ne_touche_pas_un_celle_sans_rapport():
+    texte = "Celle utilisée dans cette expérience est différente de la précédente."
+    assert corriger_accord_conditions_biologiques(texte) == texte
+
+
+def test_detecter_contradiction_reouverture_signale_augmentation_sans_vraie_reouverture():
+    # Cas réel (2026-09-12) : fermeture 0% -> 65,7%, donc la surface non colonisée
+    # diminue tout du long -- affirmer qu'elle "a augmenté" est une contradiction.
+    intervalles = _calculer_intervalles(ROWS)
+    texte = "La surface non colonisée a augmenté au fil du temps, avec des variations."
+    assert detecter_contradiction_reouverture(texte, intervalles) is True
+
+
+def test_detecter_contradiction_reouverture_absente_texte_correct():
+    intervalles = _calculer_intervalles(ROWS)
+    texte = "La surface non colonisée a diminué au fil du temps, avec une différence entre les taux."
+    assert detecter_contradiction_reouverture(texte, intervalles) is False
+
+
+def test_detecter_contradiction_reouverture_ne_signale_pas_une_vraie_reouverture():
+    # ROWS_REOUVERTURE contient un vrai delta négatif : "a augmenté" y est légitime
+    # (c'est la formulation même de _phrase_reouverture), ne doit jamais être signalé.
+    intervalles = _calculer_intervalles(ROWS_REOUVERTURE)
+    texte = "Réouverture partielle détectée : la surface non colonisée a augmenté entre 24h et 48h."
+    assert detecter_contradiction_reouverture(texte, intervalles) is False
+
+
+def test_detecter_contradiction_reouverture_absente_sans_mention_de_surface():
+    intervalles = _calculer_intervalles(ROWS)
+    texte = "Cette différence décrit uniquement les mesures disponibles, sans conclure à une accélération."
+    assert detecter_contradiction_reouverture(texte, intervalles) is False

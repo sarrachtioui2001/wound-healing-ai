@@ -280,6 +280,34 @@ def corriger_references_ordinales(texte: str, sources: list[str]) -> str:
     return _REF_ORDINALE_RE.sub(_remplacement, texte)
 
 
+# Accord grammatical observé en usage réel (2026-09-12, retour utilisateur) dans la phrase de
+# clôture du paragraphe "Mise en contexte scientifique" : PROMPT_CONTEXTE demande de citer
+# ensemble "le protocole, le système d'imagerie, les méthodes de quantification et les
+# conditions biologiques" (liste au pluriel), mais mistral 7B paraphrase parfois cette liste
+# avec un pronom/participe au singulier ("...diffèrent de celle utilisée dans cette expérience"
+# au lieu de "...diffèrent de celles utilisées..."). Corrigé après coup en code pur, sur le même
+# principe que corriger_references_ordinales ci-dessus : ne touche ni au prompt ni au contexte
+# retrouvé (juste un accord grammatical sur du texte déjà généré), donc aucun test d'isolation
+# nécessaire.
+_ACCORD_CELLE_RE = re.compile(
+    r"\b(diff[eè]r(?:e|ent))\s+de\s+celle\s+utilis[ée]e?s?\b", re.IGNORECASE
+)
+
+
+def corriger_accord_conditions_biologiques(texte: str) -> str:
+    """Remplace "diffèrent de celle utilisée" par "diffèrent de celles utilisées"
+    (accord pluriel), quand ce pronom fait référence à la liste au pluriel du
+    protocole/système d'imagerie/méthodes/conditions biologiques dans la phrase de
+    clôture du paragraphe "Mise en contexte scientifique". Portée volontairement
+    restreinte au tour "diffère(nt) de celle..." (jamais "celle utilisée" seule
+    ailleurs dans le texte) pour ne jamais corriger un usage légitime et sans
+    rapport de "celle" au singulier."""
+    def _remplacement(m: re.Match) -> str:
+        return f"{m.group(1)} de celles utilisées"
+
+    return _ACCORD_CELLE_RE.sub(_remplacement, texte)
+
+
 # Correction après coup de la longueur du paragraphe "Mise en contexte scientifique" :
 # PROMPT_CONTEXTE exige "EXACTEMENT 3 phrases", mais mistral 7B dépasse cette limite dans
 # environ 1/3 des générations (jusqu'à 5 phrases observées en usage réel, 2026-09-11). Deux
@@ -374,6 +402,38 @@ def detecter_citations_suspectes(texte: str, sources: list[str]) -> list[str]:
         if not correspond_a_une_source:
             suspectes.append(citation.strip())
     return suspectes
+
+
+# Repère une affirmation d'augmentation de la surface non colonisée / de la plaie, quel que
+# soit le nom exact utilisé par le LLM pour la désigner ("la surface non colonisée",
+# "la surface de la plaie", "la zone non colonisée"...). Attention : cette même formulation
+# ("a augmenté") est aussi celle, légitime, utilisée par _phrase_reouverture quand une vraie
+# réouverture est détectée -- la détection ci-dessous ne doit donc jamais se fier au seul mot,
+# voir detecter_contradiction_reouverture.
+_AUGMENTATION_SURFACE_RE = re.compile(
+    r"\b(?:surface|zone)[^.]{0,40}\ba\s+augment[ée]e?\b",
+    re.IGNORECASE,
+)
+
+
+def detecter_contradiction_reouverture(texte: str, intervalles: list[dict]) -> bool:
+    """Détecte une contradiction factuelle observée en usage réel (2026-09-12, retour
+    utilisateur) : le LLM affirme dans "Interprétation prudente" que "la surface non
+    colonisée a augmenté au fil du temps", alors qu'aucun intervalle calculé ne montre
+    en réalité de delta de fermeture négatif -- la fermeture est passée de 0 % à 65,7 %
+    sur l'exemple observé, donc la surface non colonisée DIMINUE, pas l'inverse.
+
+    Ne peut pas se contenter de chercher le mot "augmenté" : c'est aussi la formulation
+    légitime de _phrase_reouverture quand une vraie réouverture existe (delta négatif sur
+    un intervalle réel). Cette fonction ne signale donc que le cas contradictoire : le texte
+    affirme une augmentation alors qu'aucun intervalle réel n'en montre une.
+
+    Vérification purement programmatique après génération (comme detecter_citations_suspectes
+    ci-dessus) : ne modifie ni le prompt ni le texte, se contente de signaler."""
+    reouverture_reelle = any(iv["delta_closure_pct"] < 0 for iv in intervalles)
+    if reouverture_reelle:
+        return False
+    return bool(_AUGMENTATION_SURFACE_RE.search(texte))
 
 
 LONGUEUR_MIN_QUESTION = 8  # en dessous, ce n'est pas une vraie question (salutation, faute de frappe...)
