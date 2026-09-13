@@ -61,12 +61,21 @@ scientifique, sans jamais se substituer aux mesures ni inventer des données ?
    modèles de langage, traité ici comme une exigence de fiabilité à part
    entière, pas comme un détail d'implémentation.
 
-**Méthodologie.** Le projet suit une démarche empirique et itérative : chaque
-choix (architecture, méthode de comparaison, méthode d'ensemble, prompt du
-LLM, contenu de la base documentaire) est validé par une mesure chiffrée
-avant d'être conservé, et les résultats négatifs (ce qui n'a pas fonctionné)
-sont documentés au même titre que les résultats positifs plutôt que d'être
-passés sous silence.
+**Méthodologie.** Afin de structurer les différentes étapes de réalisation du
+projet, la méthodologie **CRISP-DM** (*Cross-Industry Standard Process for
+Data Mining*) a été adoptée. Elle permet d'organiser le travail selon six
+phases principales : compréhension du problème, compréhension des données,
+préparation des données, modélisation, évaluation et déploiement. Cette
+méthodologie est adaptée au projet puisqu'elle permet de couvrir l'ensemble
+du processus, depuis l'analyse du besoin biologique et des données jusqu'à
+l'intégration de la solution de segmentation dans une application utilisable
+(voir 2.6 pour la correspondance détaillée entre ces phases et les chapitres
+du rapport). Au sein de ce cadre, le projet suit une démarche empirique et
+itérative : chaque choix (architecture, méthode de comparaison, méthode
+d'ensemble, prompt du LLM, contenu de la base documentaire) est validé par une
+mesure chiffrée avant d'être conservé, et les résultats négatifs (ce qui n'a
+pas fonctionné) sont documentés au même titre que les résultats positifs
+plutôt que d'être passés sous silence.
 
 **Structure du rapport.** Le chapitre 1 situe le projet par rapport à la
 littérature existante sur le scratch assay et sa quantification automatique.
@@ -329,6 +338,34 @@ responsable d'un seul type de calcul :
 
 `[CAPTURE D'ÉCRAN : schéma d'architecture à refaire en diagramme (boîtes/flèches) à partir du pipeline ci-dessus, pour le rapport final]`
 
+### 2.6 Méthodologie de conduite du projet : cadre CRISP-DM
+
+Au-delà du pipeline technique décrit en 2.5, la conduite du projet dans son
+ensemble a suivi le cadre **CRISP-DM** (*Cross-Industry Standard Process for
+Data Mining*), une méthodologie standard de conduite de projet de science des
+données en six phases. Le tableau ci-dessous fait correspondre chaque phase à
+son contenu concret dans ce projet et au chapitre qui la détaille :
+
+| Phase CRISP-DM | Contenu du projet | Détaillé en |
+|---|---|---|
+| **1. Compréhension du métier** | Remplacer le tracé manuel du scratch assay, lent et peu reproductible, par une mesure automatique ; évaluer si le deep learning apporte un gain réel par rapport à une méthode classique ; fournir une interprétation scientifique prudente des résultats, sans jamais se substituer au biologiste | Introduction générale ; 2.1–2.3 |
+| **2. Compréhension des données** | 97 images de microscopie de scratch assay, annotées par un contour tracé à la main (pas un masque directement exploitable) ; 48 articles scientifiques sélectionnés manuellement pour la base documentaire du RAG | 2.4 ; 3.4 |
+| **3. Préparation des données** | Reconstruction des masques binaires à partir des contours tracés (détection de trait, pontage des discontinuités, remplissage) ; exclusion d'une image à l'annotation incomplète ; split reproductible train/val/test (68/14/14) ; augmentation de données à l'entraînement ; curation et traçabilité des décisions d'inclusion/exclusion des articles du corpus documentaire | 2.4 ; 3.3 |
+| **4. Modélisation** | U-Net + encodeur ResNet34 pré-entraîné, entraînement en deux phases, perte Dice+BCE ; baseline classique de comparaison (seuillage de texture) ; ensemble de 4 modèles indépendants ; Test-Time Augmentation ; architecture LLM/RAG à deux appels séparés (mesures / littérature) | 3.1–3.2, 3.4 |
+| **5. Évaluation** | Métriques de recouvrement et d'erreur de surface sur un jeu de test tenu à l'écart ; test de significativité de Wilcoxon et intervalle de confiance bootstrap ; étude de robustesse inter-seed ; analyse d'erreur qualitative et quantitative par catégorie ; benchmark de retrieval documentaire ; tests de régression sur la fiabilité de la génération LLM | Chapitre 4 |
+| **6. Déploiement** | Application Streamlit utilisable sans compétence de programmation ; conteneurisation Docker ; registre de modèles MLflow avec promotion automatique par comparaison de Dice ; intégration continue (tests + build Docker + test de fumée) — sans déploiement automatisé réel, portée volontairement limitée | 3.6 ; Chapitre 5 (limites) |
+
+**Nature itérative de la démarche.** Contrairement à une application linéaire
+et unique de ces six phases, plusieurs cycles ont été nécessaires en pratique
+— en particulier entre modélisation et évaluation (l'étude de robustesse
+inter-seed et l'ensemble de modèles ont été ajoutés après une première
+évaluation ayant révélé l'instabilité du Hausdorff, voir Chapitre 4), et entre
+préparation des données et évaluation côté RAG (l'élargissement ciblé du
+corpus documentaire, voir 3.4, a été motivé par des lacunes de retrieval
+constatées lors de l'évaluation). Cette itération répétée entre phases,
+plutôt qu'un enchaînement strictement séquentiel, est elle-même conforme à
+l'esprit de CRISP-DM, qui présente ce cycle comme itératif et non linéaire.
+
 ---
 
 ## Chapitre 3 : Conception et implémentation
@@ -505,7 +542,7 @@ des générations réelles répétées, jamais en supposant qu'un ajustement de
 prompt, aussi raisonnable paraisse-t-il à la lecture, produit l'effet
 recherché du premier coup.
 
-`[CAPTURE D'ÉCRAN : interface Streamlit — onglet "Analyse d'une image" et onglet "Suivi de cicatrisation" avec résumé LLM + chat RAG]`
+`[CAPTURE D'ÉCRAN : interface Streamlit — onglet "Analyse d'une image" et onglet "Suivi de cicatrisation" avec résumé scientifique LLM]`
 
 ### 3.5 Environnement et outils
 
@@ -514,6 +551,46 @@ Python, avec les bibliothèques principales suivantes : `torch` /
 `streamlit` (+ `streamlit-drawable-canvas`, `streamlit-image-coordinates`),
 `chromadb` et `rank_bm25` (recherche documentaire), `ollama` (client LLM
 local), `mlflow` (suivi d'expériences), `pytest` (tests).
+
+### 3.6 Vers l'industrialisation : conteneurisation, registre de modèles et intégration continue
+
+Au-delà du script d'entraînement et de l'application Streamlit, le projet met
+en place une première couche d'outillage MLOps, avec une portée délibérément
+limitée (voir 2.3, objectifs non fonctionnels, et Chapitre 5, limites) : il ne
+s'agit pas de construire un pipeline de déploiement continu complet, mais de
+rendre l'environnement reproductible et les modèles versionnés.
+
+**Conteneurisation (Docker).** L'application (Streamlit + dépendances Python)
+est packagée dans une image Docker CPU-only (les wheels PyTorch CPU sont
+installées explicitement, pour éviter de télécharger les dépendances CUDA
+inutiles en l'absence de GPU dans l'image). Un service Ollama séparé est
+orchestré via `docker-compose.yml`, avec les données volumineuses
+(images, sorties, index documentaire) montées en volumes plutôt qu'intégrées à
+l'image. Un `HEALTHCHECK` interroge l'endpoint de santé natif de Streamlit
+pour signaler la disponibilité réelle du service, pas seulement le démarrage
+du conteneur.
+
+**Registre de modèles (MLflow Model Registry).** Le script d'entraînement peut
+enregistrer le meilleur checkpoint comme nouvelle version versionnée d'un
+modèle nommé dans le registre MLflow (option `--register_model`, désactivée
+par défaut). Une règle de promotion automatique, volontairement simple,
+compare le Dice de validation de la nouvelle version à celui de la version
+actuellement marquée comme version de production (via un alias MLflow, pas
+les « stages » dépréciés) : la nouvelle version n'est promue que si elle
+obtient un Dice strictement supérieur, ou si aucune version n'est encore en
+production. Un échec du registre (indisponibilité, permissions) est capturé et
+journalisé sans jamais interrompre l'entraînement lui-même — l'enregistrement
+du modèle reste une fonctionnalité annexe, pas une dépendance critique du
+pipeline d'apprentissage.
+
+**Intégration continue (CI).** Le dépôt GitHub exécute, à chaque modification
+de code, la suite de tests automatisés puis la construction de l'image Docker,
+suivie d'un test de fumée qui vérifie que les dépendances de l'image
+s'importent réellement (pas seulement que la construction de l'image
+réussit). Il s'agit d'intégration continue au sens strict — garantir que le
+code et l'image restent valides — et non de déploiement continu : aucune
+publication d'image ni déploiement automatisé n'a lieu à ce stade (voir
+Chapitre 5, limites).
 
 ---
 
