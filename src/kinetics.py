@@ -31,7 +31,11 @@ OUT_DIR = "outputs/kinetics"
 
 def guess_time_h(filename: str) -> float:
     """Extrait un temps en heures depuis le nom de fichier (ex: '24h.jpg' -> 24)."""
-    match = re.search(r"(\d+)\s*h", os.path.basename(filename), re.IGNORECASE)
+    name = os.path.basename(filename)
+    match = re.search(r"(\d+)\s*h", name, re.IGNORECASE)
+    if not match:
+        # Nom purement numérique ('00.jpg', '24.jpg', '48.jpg') : on lit le nombre comme des heures.
+        match = re.fullmatch(r"(\d+)", os.path.splitext(name)[0])
     if not match:
         raise ValueError(f"Impossible de déduire le temps depuis le nom '{filename}'; précisez-le manuellement.")
     return float(match.group(1))
