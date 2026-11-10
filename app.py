@@ -43,15 +43,19 @@ from measure import area_px_to_cm2, extract_contours, wound_area_px
 from metrics import confusion_counts, dice_score, iou_score
 from predict import draw_contour_overlay, load_model, predict_mask
 from preprocess import clean_image
-from chatbot import (
-    _calculer_intervalles,
-    corriger_accord_conditions_biologiques,
-    corriger_references_ordinales,
-    detecter_citations_suspectes,
-    detecter_contradiction_reouverture,
-    generer_resume_stream,
-    nettoyer_placeholder_reouverture,
-)
+try:
+    from chatbot import (
+        _calculer_intervalles,
+        corriger_accord_conditions_biologiques,
+        corriger_references_ordinales,
+        detecter_citations_suspectes,
+        detecter_contradiction_reouverture,
+        generer_resume_stream,
+        nettoyer_placeholder_reouverture,
+    )
+    CHATBOT_OK = True
+except ImportError:  # assistant IA (Ollama/ChromaDB) absent : déploiement sans chatbot
+    CHATBOT_OK = False
 
 st.set_page_config(page_title="Segmentation de plaie", page_icon="🩹", layout="wide")
 
@@ -970,43 +974,44 @@ with tab_kinetics:
 
             st.caption(f"💾 Également enregistré dans {csv_path} et {plot_path}")
 
-            with st.container(border=True):
-                st.subheader("🤖 Résumé scientifique")
-                st.caption(
-                    "Transforme le tableau de mesures ci-dessus en un paragraphe de "
-                    "résultats prêt à réutiliser, appuyé sur la littérature scientifique."
-                )
-                if st.button("Générer un résumé scientifique", type="primary", use_container_width=True):
-                    try:
-                        with st.spinner("Génération du résumé (peut prendre 1 à 2 minutes)..."):
-                            morceaux, sources = generer_resume_stream(rows)
-                            resume = "".join(morceaux)
-                        resume = corriger_references_ordinales(resume, sources)
-                        resume = nettoyer_placeholder_reouverture(resume)
-                        resume = corriger_accord_conditions_biologiques(resume)
-                        citations_suspectes = detecter_citations_suspectes(resume, sources)
-                        contradiction_reouverture = detecter_contradiction_reouverture(
-                            resume, _calculer_intervalles(rows)
-                        )
-                        st.write(resume)
-                        bouton_ecouter(resume)
+            if CHATBOT_OK:
+                with st.container(border=True):
+                    st.subheader("🤖 Résumé scientifique")
+                    st.caption(
+                        "Transforme le tableau de mesures ci-dessus en un paragraphe de "
+                        "résultats prêt à réutiliser, appuyé sur la littérature scientifique."
+                    )
+                    if st.button("Générer un résumé scientifique", type="primary", use_container_width=True):
+                        try:
+                            with st.spinner("Génération du résumé (peut prendre 1 à 2 minutes)..."):
+                                morceaux, sources = generer_resume_stream(rows)
+                                resume = "".join(morceaux)
+                            resume = corriger_references_ordinales(resume, sources)
+                            resume = nettoyer_placeholder_reouverture(resume)
+                            resume = corriger_accord_conditions_biologiques(resume)
+                            citations_suspectes = detecter_citations_suspectes(resume, sources)
+                            contradiction_reouverture = detecter_contradiction_reouverture(
+                                resume, _calculer_intervalles(rows)
+                            )
+                            st.write(resume)
+                            bouton_ecouter(resume)
+                            if sources:
+                                st.caption("Sources : " + ", ".join(sources))
+                            afficher_citations_suspectes(citations_suspectes)
+                            afficher_contradiction_reouverture(contradiction_reouverture)
+                            st.session_state["kinetics_resume"] = {
+                                "texte": resume, "sources": sources, "citations_suspectes": citations_suspectes,
+                                "contradiction_reouverture": contradiction_reouverture,
+                            }
+                        except RuntimeError as exc:
+                            st.error(str(exc))
+                    elif st.session_state.get("kinetics_resume"):
+                        st.write(st.session_state["kinetics_resume"]["texte"])
+                        bouton_ecouter(st.session_state["kinetics_resume"]["texte"])
+                        sources = st.session_state["kinetics_resume"]["sources"]
                         if sources:
                             st.caption("Sources : " + ", ".join(sources))
-                        afficher_citations_suspectes(citations_suspectes)
-                        afficher_contradiction_reouverture(contradiction_reouverture)
-                        st.session_state["kinetics_resume"] = {
-                            "texte": resume, "sources": sources, "citations_suspectes": citations_suspectes,
-                            "contradiction_reouverture": contradiction_reouverture,
-                        }
-                    except RuntimeError as exc:
-                        st.error(str(exc))
-                elif st.session_state.get("kinetics_resume"):
-                    st.write(st.session_state["kinetics_resume"]["texte"])
-                    bouton_ecouter(st.session_state["kinetics_resume"]["texte"])
-                    sources = st.session_state["kinetics_resume"]["sources"]
-                    if sources:
-                        st.caption("Sources : " + ", ".join(sources))
-                    afficher_citations_suspectes(st.session_state["kinetics_resume"].get("citations_suspectes"))
-                    afficher_contradiction_reouverture(
-                        st.session_state["kinetics_resume"].get("contradiction_reouverture")
-                    )
+                        afficher_citations_suspectes(st.session_state["kinetics_resume"].get("citations_suspectes"))
+                        afficher_contradiction_reouverture(
+                            st.session_state["kinetics_resume"].get("contradiction_reouverture")
+                        )

@@ -1,3 +1,13 @@
+---
+title: Wound Healing AI
+emoji: 🩹
+colorFrom: green
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Segmentation automatique de plaie (wound healing / scratch assay)
 
 Pipeline de segmentation automatique de plaie par deep learning (U-Net + encodeur
