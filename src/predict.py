@@ -33,8 +33,26 @@ def _build_model_from_checkpoint(checkpoint: dict, device: torch.device):
     return model, checkpoint["img_size"]
 
 
+DEFAULT_MODEL_URL = (
+    "https://github.com/sarrachtioui2001/wound-healing-ai/releases/download/v1/"
+    "unet_resnet34_best.pt"
+)
+
+
+def _ensure_checkpoint(ckpt_path: str) -> None:
+    """Déploiement (Streamlit Cloud, etc.) : les .pt ne sont pas dans git. Si le modèle
+    par défaut est absent, on le télécharge depuis la GitHub Release."""
+    if os.path.exists(ckpt_path) or os.path.basename(ckpt_path) != "unet_resnet34_best.pt":
+        return
+    import urllib.request
+    os.makedirs(os.path.dirname(ckpt_path), exist_ok=True)
+    urllib.request.urlretrieve(os.environ.get("MODEL_URL", DEFAULT_MODEL_URL), ckpt_path + ".tmp")
+    os.replace(ckpt_path + ".tmp", ckpt_path)
+
+
 def load_model(run_name: str, device: torch.device):
     ckpt_path = os.path.join(CKPT_DIR, f"{run_name}_best.pt")
+    _ensure_checkpoint(ckpt_path)
     checkpoint = torch.load(ckpt_path, map_location=device)
     return _build_model_from_checkpoint(checkpoint, device)
 

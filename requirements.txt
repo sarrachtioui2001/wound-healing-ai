@@ -1,8 +1,9 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 torch
 torchvision
 segmentation-models-pytorch
 albumentations
-opencv-python
+opencv-python-headless
 numpy
 matplotlib
 streamlit
@@ -11,7 +12,3 @@ streamlit-image-coordinates
 pillow
 scipy
 requests
-chromadb
-rank_bm25
-ollama
-mlflow
