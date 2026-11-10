@@ -736,6 +736,7 @@ with tab_single:
                 height=canvas_h,
                 width=canvas_w,
                 drawing_mode="freedraw",
+                return_image_data=True,
                 key=f"canvas_{image_file.name}_{manual_mode}_{st.session_state.canvas_reset_counter}",
             )
 

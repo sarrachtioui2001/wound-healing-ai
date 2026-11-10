@@ -6,7 +6,7 @@ opencv-python
 numpy
 matplotlib
 streamlit
-streamlit-drawable-canvas
+streamlit-drawable-canvas>=0.13
 streamlit-image-coordinates
 pillow
 scipy
