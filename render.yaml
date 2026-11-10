@@ -2,8 +2,8 @@ services:
   - type: web
     name: wound-healing-ai
     runtime: docker
-    plan: standard        # 2 Go de RAM : torch + modèle ; "starter" (512 Mo) est trop juste
+    plan: free            # 512 Mo de RAM : suffisant pour l'interface + 1 modèle (pas l'ensemble de 4)
     healthCheckPath: /_stcore/health
     envVars:
-      - key: MODEL_URLS   # URL(s) des .pt dans une GitHub Release, séparées par des virgules
-        sync: false
+      - key: MODEL_URLS   # URL du .pt dans la GitHub Release
+        value: https://github.com/sarrachtioui2001/wound-healing-ai/releases/download/v1/unet_resnet34_best.pt
