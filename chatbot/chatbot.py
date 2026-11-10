@@ -544,11 +544,11 @@ Synthèse chiffrée déjà calculée par le pipeline (valeurs finales à reprend
 ta réponse ; ne recalcule et n'invente aucun de ces chiffres, ne les arrondis pas différemment) :
 {synthese}
 
-Vitesse de fermeture par intervalle, déjà calculée par le pipeline (sers-t'en pour comparer les \
-vitesses moyennes entre intervalles, sans recalculer ces vitesses toi-même) :
+Taux estimé de fermeture par intervalle, déjà calculé par le pipeline (sers-t'en pour comparer les \
+taux moyens entre intervalles, sans recalculer ces taux toi-même) :
 {intervalles}
 
-Phrase de liaison entre la vitesse moyenne globale et l'hétérogénéité par intervalle, déjà \
+Phrase de liaison entre le taux moyen estimé global et l'hétérogénéité par intervalle, déjà \
 composée par le pipeline (à reprendre mot pour mot dans "Analyse quantitative" si elle contient \
 une vraie phrase ; si elle est entre parenthèses, ne la reprends pas et n'en invente pas \
 d'équivalent) :
@@ -583,23 +583,23 @@ est mesuré, ce qui est calculé, et ce qui reste prudent :
   images issues d'un scratch assay montre une diminution de la surface non colonisée".
 
 **Analyse quantitative**
-- Cite TOUJOURS la vitesse moyenne de fermeture sur l'ensemble de la période (depuis la synthèse
-  chiffrée), même si tu détailles ensuite les taux par intervalle : ne la laisse jamais implicite
-  ou absente. Précise aussi quel intervalle a le taux le plus élevé / le plus faible (depuis les
-  vitesses par intervalle ci-dessus), sans te contenter de répéter les chiffres déjà visibles dans
+- Cite TOUJOURS le taux moyen estimé de fermeture sur l'ensemble de la période (depuis la synthèse
+  chiffrée), même si tu détailles ensuite les taux par intervalle : ne le laisse jamais implicite
+  ou absent. Précise aussi quel intervalle a le taux le plus élevé / le plus faible (depuis les
+  taux par intervalle ci-dessus), sans te contenter de répéter les chiffres déjà visibles dans
   le tableau du biologiste.
 - Si la "Phrase de liaison" ci-dessus contient une vraie phrase (pas une note entre parenthèses),
   REPRENDS-LA MOT POUR MOT dans cette section, sans changer un seul chiffre et sans la recomposer
-  toi-même : ne recopie jamais le taux d'un intervalle à la place de la vitesse moyenne globale dans
+  toi-même : ne recopie jamais le taux d'un intervalle à la place du taux moyen estimé global dans
   cette phrase, cette phrase fait seule autorité sur ce point précis. Sans elle, un lecteur qui compare le
   résumé au tableau des mesures peut croire à un oubli plutôt qu'à un choix de présentation. Si elle
   est entre parenthèses, n'invente pas de comparaison d'hétérogénéité à la place.
 - 2 à 3 phrases au total pour cette section.
-- IMPORTANT : chaque vitesse en %/h que tu écris doit être copiée mot pour mot depuis la section
-  "Vitesse de fermeture par intervalle" ci-dessus (ou depuis la synthèse chiffrée pour la vitesse
-  moyenne) : ce sont les deux seuls endroits de ce prompt qui font autorité sur les vitesses.
-  N'écris jamais une vitesse qui ne soit pas recopiée telle quelle depuis ces deux sections, SIGNE
-  INCLUS : recopie le signe "-" si la source en affiche un (une vitesse négative signifie que la
+- IMPORTANT : chaque taux en %/h que tu écris doit être copié mot pour mot depuis la section
+  "Taux estimé de fermeture par intervalle" ci-dessus (ou depuis la synthèse chiffrée pour le taux
+  moyen) : ce sont les deux seuls endroits de ce prompt qui font autorité sur les taux.
+  N'écris jamais un taux qui ne soit pas recopié tel quel depuis ces deux sections, SIGNE
+  INCLUS : recopie le signe "-" si la source en affiche un (un taux négatif signifie que la
   surface a augmenté, pas seulement fermé plus lentement), et n'en ajoute JAMAIS un si la source
   n'en affiche pas -- dans les deux cas, le signe de ta phrase doit être identique à celui affiché
   dans la source, jamais déduit ni copié depuis un autre exemple.
@@ -624,14 +624,14 @@ est mesuré, ce qui est calculé, et ce qui reste prudent :
 - rappelle en une phrase, SANS RÉPÉTER LE CHIFFRE (déjà donné dans "Résultats observés" ci-dessus,
   ne le recompte ni ne l'invente pas une seconde fois ici), que ce résumé décrit une évolution
   globale sur peu de mesures, pas une cinétique fine,
-- n'affirme jamais une tendance qui contredirait les vitesses par intervalle fournies ci-dessus.
+- n'affirme jamais une tendance qui contredirait les taux par intervalle fournis ci-dessus.
 
 Reste factuel et concis (4 à 7 phrases au total sur les 3 sections), sans réclamer d'information
 supplémentaire au biologiste.
 
 RÈGLE GLOBALE VALABLE DANS LES 3 SECTIONS CI-DESSUS, PAS SEULEMENT DANS "Interprétation prudente" \
 : n'écris JAMAIS les mots "accélération", "accéléré", "ralentissement" ou "ralenti" au sujet de la \
-cicatrisation ou de sa vitesse, y compris dans "Analyse quantitative" où seule une différence de \
+cicatrisation ou de son taux de fermeture, y compris dans "Analyse quantitative" où seule une différence de \
 taux moyens entre intervalles peut être mentionnée (jamais qu'un taux "accélère" ou "ralentit").
 """
 
@@ -792,8 +792,8 @@ def _format_synthese(synthese: dict, n_mesures: int) -> str:
         f"- Surface finale (T = {_fr(t_final['time_h'])}h) : {_surface(t_final)}",
         f"- Fermeture finale : {_fr(synthese['fermeture_finale_pct'])}% par rapport à T0",
         f"- Durée totale d'observation : {_fr(synthese['duree_h'])}h",
-        f"- Vitesse moyenne de fermeture sur la période observée : {_fr(synthese['vitesse_moyenne_pct_h'])}%/h "
-        "(points de % par heure, pas une vitesse instantanée)",
+        f"- Taux moyen estimé de fermeture sur la période observée : {_fr(synthese['vitesse_moyenne_pct_h'])}%/h "
+        "(points de % par heure, pas un taux instantané)",
     ])
 
 
@@ -834,12 +834,12 @@ def _format_intervalles(intervalles: list[dict]) -> str:
             lignes.append(
                 f"- Entre {_fr(iv['t_debut'])}h et {_fr(iv['t_fin'])}h : réouverture partielle, "
                 f"la surface non colonisée a augmenté de {_fr(abs(iv['delta_closure_pct']))} points de %, "
-                f"soit une vitesse de {_fr(iv['vitesse_pct_h'])}%/h sur cet intervalle"
+                f"soit un taux estimé de {_fr(iv['vitesse_pct_h'])}%/h sur cet intervalle"
             )
         else:
             lignes.append(
                 f"- Entre {_fr(iv['t_debut'])}h et {_fr(iv['t_fin'])}h : fermeture +{_fr(iv['delta_closure_pct'])} "
-                f"points de %, soit une vitesse de {_fr(iv['vitesse_pct_h'])}%/h sur cet intervalle"
+                f"points de %, soit un taux estimé de {_fr(iv['vitesse_pct_h'])}%/h sur cet intervalle"
             )
     if len(intervalles) > 1:
         plus_rapide = max(intervalles, key=lambda iv: iv["vitesse_pct_h"])
@@ -869,9 +869,10 @@ def _phrase_heterogeneite(synthese: dict, intervalles: list[dict]) -> str:
         return "(taux identique sur tous les intervalles : pas d'hétérogénéité à signaler)"
 
     return (
-        f"La vitesse moyenne de fermeture sur l'ensemble de la période "
-        f"({_fr(synthese['vitesse_moyenne_pct_h'])}%/h) masque cette hétérogénéité : le taux "
-        f"estimé est plus élevé sur l'intervalle {_fr(plus_rapide['t_debut'])}h-{_fr(plus_rapide['t_fin'])}h "
+        f"Le taux moyen estimé de fermeture sur l'ensemble de la période "
+        f"({_fr(synthese['vitesse_moyenne_pct_h'])}%/h) ne reflète pas les différences observées "
+        f"entre les intervalles : le taux estimé est plus élevé sur l'intervalle "
+        f"{_fr(plus_rapide['t_debut'])}h-{_fr(plus_rapide['t_fin'])}h "
         f"({_fr(plus_rapide['vitesse_pct_h'])}%/h) que sur l'intervalle "
         f"{_fr(plus_lent['t_debut'])}h-{_fr(plus_lent['t_fin'])}h ({_fr(plus_lent['vitesse_pct_h'])}%/h)."
     )

@@ -5,7 +5,9 @@ Usage:
 """
 import base64
 import io
+import json
 import os
+import re
 import sys
 import zipfile
 
@@ -58,155 +60,211 @@ st.markdown(
     <style>
     :root {
         --accent: #0F766E;
+        --accent-strong: #115E59;
         --accent-soft: #F0FDFA;
+        --accent-line: #99F6E4;
         --ink: #0F172A;
         --ink-muted: #475569;
+        --ink-faint: #64748B;
         --border: #E2E8F0;
+        --border-strong: #CBD5E1;
         --surface: #F8FAFC;
+        --card: #FFFFFF;
+        --warn-soft: #FFFBEB;
+        --warn-line: #FDE68A;
+        --radius-lg: 12px;
+        --radius-md: 8px;
+        --shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 2px 8px rgba(15, 23, 42, 0.04);
+        --font-ui: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+        --font-mono: "Consolas", "SFMono-Regular", Menlo, monospace;
     }
 
-    /* Titre principal + sous-titre : un peu d'air, séparation nette avec les onglets. */
-    h1, h2, h3 {
+    html, body, [data-testid="stAppViewContainer"] {
+        font-family: var(--font-ui);
         color: var(--ink);
     }
-    [data-testid="stAppViewContainer"] [data-testid="stHeadingWithActionElements"] h1 {
-        margin-bottom: 0.1rem;
+    [data-testid="stMainBlockContainer"], .block-container {
+        padding-top: 2rem;
+        padding-bottom: 3rem;
+        max-width: 1320px;
+    }
+
+    /* Hiérarchie typographique unique pour toute l'appli. */
+    h1, h2, h3, h4 {
+        color: var(--ink);
+        font-family: var(--font-ui);
+        letter-spacing: -0.01em;
+    }
+    h3 {
+        font-size: 1.1rem !important;
+        font-weight: 650 !important;
+        padding-top: 0.2rem !important;
+        padding-bottom: 0.4rem !important;
     }
     [data-testid="stCaptionContainer"] {
         color: var(--ink-muted);
+        line-height: 1.5;
+    }
+    [data-testid="stMarkdownContainer"] p {
+        line-height: 1.6;
     }
 
-    /* Barre d'onglets : libellés plus grands et plus lisibles, transition douce
-       au survol/à la sélection au lieu du style par défaut assez discret. */
+    /* En-tête de l'appli. */
+    .app-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1.1rem 1.4rem;
+        margin-bottom: 1.2rem;
+        background: linear-gradient(135deg, var(--accent-soft), var(--card) 70%);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow);
+    }
+    .app-header-icon {
+        font-size: 2.1rem;
+        line-height: 1;
+    }
+    .app-header h1 {
+        font-size: 1.6rem;
+        font-weight: 700;
+        margin: 0;
+        padding: 0;
+    }
+    .app-header p {
+        margin: 0.25rem 0 0.5rem 0;
+        color: var(--ink-muted);
+        font-size: 0.95rem;
+    }
+    .app-badge {
+        display: inline-block;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #92400E;
+        background: var(--warn-soft);
+        border: 1px solid var(--warn-line);
+        border-radius: 999px;
+        padding: 0.15rem 0.65rem;
+    }
+
+    /* Onglets. */
     [data-testid="stTabs"] [data-baseweb="tab-list"] {
-        gap: 0.5rem;
+        gap: 1.25rem;
         border-bottom: 1px solid var(--border);
     }
     [data-testid="stTab"] {
         font-size: 1rem;
         font-weight: 600;
         color: var(--ink-muted);
-        padding: 0.75rem 0.25rem;
+        padding: 0.75rem 0.1rem;
         transition: color 0.15s ease;
     }
-    [data-testid="stTab"]:hover {
-        color: var(--accent);
-    }
+    [data-testid="stTab"]:hover,
     [data-testid="stTab"][aria-selected="true"] {
         color: var(--accent);
     }
+    [data-testid="stTabs"] [data-baseweb="tab-panel"] {
+        padding-top: 1.1rem;
+    }
 
-    /* Barre latérale : léger fond distinct du contenu principal + titres compacts. */
+    /* Barre latérale = boîte à outils. */
     [data-testid="stSidebar"] {
         border-right: 1px solid var(--border);
         background-color: var(--surface);
     }
     [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
-        font-size: 1.05rem;
+        font-size: 1.02rem !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+        gap: 0.45rem;
     }
 
-    /* Cartes (st.container(border=True)) : ombre légère et coins arrondis au lieu
-       du simple filet gris par défaut, pour détacher visuellement chaque section
-       du résultat (aperçu, surface, correction manuelle, etc.). */
-    [data-testid="stVerticalBlock"][data-test-scroll-behavior] {
-        border-radius: 12px;
+    /* Cartes (st.container(border=True)). */
+    [data-testid="stVerticalBlock"][data-test-scroll-behavior],
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        border-radius: var(--radius-lg);
         border-color: var(--border);
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 6px rgba(15, 23, 42, 0.04);
+        background-color: var(--card);
+        box-shadow: var(--shadow);
     }
 
-    /* Statistiques (st.metric) présentées comme de petites tuiles plutôt que du
-       texte nu, pour qu'elles ressortent dans les cartes de résultats. */
+    /* Statistiques (st.metric) en tuiles. */
     [data-testid="stMetric"] {
         background-color: var(--accent-soft);
-        border: 1px solid #CCFBF1;
-        border-radius: 10px;
+        border: 1px solid var(--accent-line);
+        border-radius: var(--radius-md);
         padding: 0.75rem 1rem;
     }
     [data-testid="stMetricLabel"] {
         color: var(--ink-muted);
-        font-size: 0.8rem;
+        font-size: 0.78rem;
         text-transform: uppercase;
-        letter-spacing: 0.03em;
+        letter-spacing: 0.04em;
     }
     [data-testid="stMetricValue"] {
+        font-family: var(--font-mono);
         font-weight: 700;
         color: var(--ink);
     }
 
-    /* Zone de dépôt de fichier : bordure en pointillés teintée au lieu du gris
-       neutre par défaut, plus cohérente avec le reste de l'appli. */
+    /* Champs de saisie et zone de dépôt. */
     [data-testid="stFileUploaderDropzone"] {
-        border-radius: 10px;
+        border-radius: var(--radius-md);
         background-color: var(--surface);
-        border: 1px dashed #94A3B8;
-        transition: border-color 0.15s ease;
+        border: 1px dashed var(--border-strong);
+        transition: border-color 0.15s ease, background-color 0.15s ease;
     }
     [data-testid="stFileUploaderDropzone"]:hover {
         border-color: var(--accent);
+        background-color: var(--accent-soft);
+    }
+    [data-testid="stTextInput"] input,
+    [data-testid="stNumberInput"] input {
+        border-radius: var(--radius-md);
     }
 
-    /* Panneaux dépliants (réglages du nettoyage, etc.) alignés sur le style carte. */
-    [data-testid="stExpander"] {
-        border-radius: 10px;
+    [data-testid="stExpander"] details {
+        border-radius: var(--radius-md);
         border-color: var(--border);
     }
-
-    /* Messages d'alerte (info/erreur/succès) : coins arrondis cohérents avec le
-       reste plutôt que le rectangle un peu carré par défaut. */
     [data-testid="stAlertContainer"] {
-        border-radius: 10px;
+        border-radius: var(--radius-md);
+    }
+    [data-testid="stDataFrame"] {
+        border-radius: var(--radius-md);
+        overflow: hidden;
     }
 
+    /* Boutons. */
     .stButton > button, .stDownloadButton > button {
         font-weight: 600;
-        border-radius: 8px;
+        border-radius: var(--radius-md);
+        transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+    .stButton > button[kind="primary"]:hover,
+    .stDownloadButton > button[kind="primary"]:hover {
+        background-color: var(--accent-strong);
+        border-color: var(--accent-strong);
+    }
+    .stButton > button[kind="secondary"]:hover,
+    .stDownloadButton > button[kind="secondary"]:hover {
+        border-color: var(--accent);
+        color: var(--accent);
     }
 
-    /* Bulles de chat façon ChatGPT dans l'onglet Assistant IA :
-       message utilisateur aligné à droite en teal, assistant à gauche en gris clair. */
-    [data-testid="stChatMessage"]:has([aria-label="Chat message from user"]) {
-        flex-direction: row-reverse;
-    }
-    [data-testid="stChatMessageContent"][aria-label="Chat message from user"] {
-        background-color: var(--accent);
-        color: #FFFFFF;
-        border-radius: 16px;
-        padding: 0.6rem 1rem;
-        margin-left: auto;
-        max-width: 75%;
-    }
-    [data-testid="stChatMessageContent"][aria-label="Chat message from assistant"] {
-        background-color: #F1F5F9;
-        border-radius: 16px;
-        padding: 0.6rem 1rem;
-        max-width: 75%;
-    }
-
-    /* Libellés de boutons sur une seule ligne, tronqués proprement (utile pour
-       les titres de conversation longs dans la liste de l'Assistant IA). */
-    .stButton > button p {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    /* --- Habillage inspiré des fenêtres d'image ImageJ : barre de titre grise
-       avec dimensions (comme le titre d'une fenêtre ImageJ, ex "image.tif (512x384; RGB)"),
-       cadre net sur fond clair au lieu d'un st.image nu. Purement visuel : ne change
-       aucune valeur calculée, seulement l'affichage des images déjà produites par le
-       pipeline (voir imagej_window_html ci-dessous). */
+    /* Fenêtres d'image façon ImageJ (purement visuel, voir imagej_window_html). */
     .ij-window {
         border: 1px solid #8A8F98;
-        border-radius: 3px;
+        border-radius: 4px;
         overflow: hidden;
         margin-bottom: 0.9rem;
-        box-shadow: 1px 1px 4px rgba(15, 23, 42, 0.18);
+        box-shadow: 1px 1px 4px rgba(15, 23, 42, 0.14);
     }
     .ij-titlebar {
         background: linear-gradient(180deg, #F1F3F5, #D6DAE0);
         border-bottom: 1px solid #8A8F98;
         color: #1F2937;
-        font-family: "Segoe UI", Tahoma, Geneva, sans-serif;
+        font-family: var(--font-ui);
         font-size: 0.72rem;
         font-weight: 600;
         letter-spacing: 0.01em;
@@ -224,28 +282,17 @@ st.markdown(
         max-width: 100%;
         display: inline-block;
     }
-    /* Fenêtre vide (avant chargement d'image) : canevas en pointillés avec message
-       d'invite, plutôt qu'un st.info bleu générique qui détonnait avec le reste. */
     .ij-canvas-empty {
         min-height: 220px;
         display: flex;
         align-items: center;
         justify-content: center;
+        text-align: center;
         border: 1px dashed #9CA3AF;
         margin: 0.4rem;
+        padding: 1rem;
         color: #4B5563;
         font-size: 0.95rem;
-    }
-
-    /* Lectures chiffrées (surface, Dice...) façon barre d'état ImageJ : police
-       technique à chasse fixe plutôt que la police d'interface habituelle. */
-    [data-testid="stMetricValue"] {
-        font-family: "Consolas", "SFMono-Regular", Menlo, monospace;
-    }
-
-    /* Barre latérale = boîte à outils : un peu plus dense, comme une palette d'outils. */
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-        gap: 0.4rem;
     }
     </style>
     """,
@@ -311,6 +358,60 @@ def afficher_contradiction_reouverture(contradiction_detectee: bool):
         )
 
 
+_STYLE_BOUTON_TTS = (
+    "padding:0.45rem 1rem;border-radius:8px;border:1px solid #0F766E;background:#0F766E;"
+    "color:#fff;font-weight:600;font-size:0.95rem;cursor:pointer;"
+)
+
+
+def texte_pour_lecture(texte: str) -> str:
+    """Retire la mise en forme Markdown (titres, gras, listes) pour qu'elle ne soit pas lue à voix haute."""
+    texte = re.sub(r"^\s{0,3}#{1,6}\s*", "", texte, flags=re.MULTILINE)
+    texte = re.sub(r"^\s*[-*•]\s+", "", texte, flags=re.MULTILINE)
+    texte = re.sub(r"[*_`]+", "", texte)
+    return re.sub(r"\n{2,}", ". ", texte).strip()
+
+
+def bouton_ecouter(texte: str):
+    """Lecture à voix haute par la synthèse vocale du navigateur (Web Speech API) :
+    locale, sans dépendance ni connexion, voix française du système quand elle existe."""
+    texte_json = json.dumps(texte_pour_lecture(texte)).replace("</", "<\\/")
+    st.iframe(
+        f"""
+        <div style="display:flex;gap:8px;align-items:center;font-family:'Segoe UI',system-ui,sans-serif;">
+          <button id="play" style="{_STYLE_BOUTON_TTS}">🔊 Écouter le résumé</button>
+          <button id="stop" style="{_STYLE_BOUTON_TTS}background:#fff;color:#0F766E;">⏹ Arrêter</button>
+          <span id="msg" style="color:#475569;font-size:0.85rem;"></span>
+        </div>
+        <script>
+          const texte = {texte_json};
+          const synth = window.speechSynthesis;
+          const msg = document.getElementById("msg");
+          if (!synth) {{
+            document.getElementById("play").disabled = true;
+            msg.textContent = "Synthèse vocale non disponible dans ce navigateur.";
+          }}
+          function voixFr() {{
+            return synth.getVoices().find(v => v.lang && v.lang.toLowerCase().startsWith("fr"));
+          }}
+          document.getElementById("play").onclick = () => {{
+            synth.cancel();
+            const u = new SpeechSynthesisUtterance(texte);
+            u.lang = "fr-FR";
+            const v = voixFr();
+            if (v) u.voice = v;
+            u.rate = 0.95;
+            u.onend = () => msg.textContent = "";
+            msg.textContent = v ? "Lecture en cours…" : "Lecture en cours (aucune voix française installée).";
+            synth.speak(u);
+          }};
+          document.getElementById("stop").onclick = () => {{ synth.cancel(); msg.textContent = ""; }};
+        </script>
+        """,
+        height=52,
+    )
+
+
 def to_pil(image_bgr):
     return Image.fromarray(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
 
@@ -374,14 +475,20 @@ def fill_traced_outline(stroke_mask):
     return filled
 
 
-st.title("🩹 Segmentation automatique de plaie")
-st.caption(
-    "Détection automatique de la plaie par intelligence artificielle (U-Net) : "
-    "masque, contour, surface, et suivi de la cicatrisation dans le temps."
-)
-st.caption(
-    "⚠️ Outil de quantification d'image pour la recherche in vitro (scratch assay), "
-    "pas un outil d'aide au diagnostic médical ni un dispositif clinique."
+st.markdown(
+    """
+    <div class="app-header">
+      <div class="app-header-icon">🩹</div>
+      <div>
+        <h1>Segmentation automatique de plaie</h1>
+        <p>Détection automatique de la plaie par intelligence artificielle (U-Net) :
+        masque, contour, surface, et suivi de la cicatrisation dans le temps.</p>
+        <span class="app-badge">⚠️ Outil de quantification d'image pour la recherche in vitro
+        (scratch assay), pas un outil d'aide au diagnostic médical ni un dispositif clinique.</span>
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
 with st.sidebar:
@@ -433,7 +540,7 @@ with st.sidebar:
         contrast_on = st.checkbox("Renforcement du contraste (CLAHE)", value=True, disabled=not preprocess_on)
 
     st.divider()
-    st.caption("Ces réglages s'appliquent aux deux onglets.")
+    st.caption("Ces réglages s'appliquent à l'analyse d'image et au suivi de cicatrisation.")
 
 tab_single, tab_kinetics = st.tabs(
     ["🔬 Analyse d'une image", "📈 Suivi de cicatrisation"]
@@ -882,6 +989,7 @@ with tab_kinetics:
                             resume, _calculer_intervalles(rows)
                         )
                         st.write(resume)
+                        bouton_ecouter(resume)
                         if sources:
                             st.caption("Sources : " + ", ".join(sources))
                         afficher_citations_suspectes(citations_suspectes)
@@ -894,6 +1002,7 @@ with tab_kinetics:
                         st.error(str(exc))
                 elif st.session_state.get("kinetics_resume"):
                     st.write(st.session_state["kinetics_resume"]["texte"])
+                    bouton_ecouter(st.session_state["kinetics_resume"]["texte"])
                     sources = st.session_state["kinetics_resume"]["sources"]
                     if sources:
                         st.caption("Sources : " + ", ".join(sources))
@@ -901,4 +1010,3 @@ with tab_kinetics:
                     afficher_contradiction_reouverture(
                         st.session_state["kinetics_resume"].get("contradiction_reouverture")
                     )
-

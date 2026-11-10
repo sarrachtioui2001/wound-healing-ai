@@ -80,7 +80,7 @@ stopping sur le Dice de validation, tracking MLflow. Voir [src/train.py](src/tra
 [src/plot_training_curves.py](src/plot_training_curves.py)) : train vs validation
 uniquement — le jeu de test reste tenu à l'écart et n'est évalué qu'une seule fois
 (voir Évaluation ci-dessous), pas suivi époque par époque. Les deux courbes
-montrent une convergence régulière, sans signe de surapprentissage (le Dice de
+montrent une convergence régulière, sans signe évident de surapprentissage (le Dice de
 validation ne décroche pas du Dice de train). Le Dice de validation est
 au contraire *supérieur* à celui de train tout au long de l'entraînement : c'est
 attendu ici, car l'augmentation de données forte appliquée à l'entraînement
@@ -183,7 +183,7 @@ robustesse inter-seed ci-dessus/ci-dessous).
 
 **Vérification préalable** : les 4 modèles combinés ont été contrôlés individuellement sur leurs
 courbes d'entraînement (`outputs/*_training_log.csv`) avant d'être combinés — val_loss < train_loss
-et val_dice > train_dice jusqu'à la dernière époque pour les 4, aucun signe de surapprentissage
+et val_dice > train_dice jusqu'à la dernière époque pour les 4, aucun signe évident de surapprentissage
 (cohérent avec l'explication déjà donnée pour `unet_resnet34_holdout` dans "Courbes
 d'apprentissage" ci-dessus : augmentation forte au train, pas un signal d'alerte).
 
@@ -201,7 +201,7 @@ via `--seed`) a été répété sur 3 graines (`unet_resnet34_seed42/123/2026`) 
 | Seed | Dice | IoU | Erreur de surface | Hausdorff normalisé |
 |---|---:|---:|---:|---:|
 | 42 | 0,880 | 0,791 | 16,1 % | 0,083 |
-| 123 | 0,904 | 0,828 | 7,2 % | 0,131 |
+| 123 | 0,903 | 0,828 | 7,2 % | 0,131 |
 | 2026 | 0,892 | 0,809 | 8,8 % | 0,032 |
 | **moyenne ± écart-type** | **0,892 ± 0,009** | **0,809 ± 0,015** | **10,7 % ± 3,9 %** | **0,082 ± 0,040** |
 
@@ -309,19 +309,31 @@ déjà discutée ci-dessus) et n'est reportée qu'à titre indicatif.
    carte verte/rouge superposée + alerte automatique si la zone de désaccord entre
    modèles dépasse 25 % de la zone détectée.
 2. **Suivi de cicatrisation** : suivi temporel multi-images, % de fermeture,
-   courbe, résumé scientifique généré par LLM, puis un **chat RAG intégré**
-   (ChromaDB + Ollama/mistral) sous le résumé pour poser des questions libres
-   sur ce même résultat — plus de contexte à ressaisir, l'assistant reprend
-   automatiquement les mesures déjà calculées ci-dessus. Réponse structurée en
-   4 sections (📊 Résultats observés / 🔬 Interprétation / ⚠️ Limites / 📚
-   Littérature, voir `PROMPT_TEMPLATE` dans [chatbot/chatbot.py](chatbot/chatbot.py)),
-   avec les mêmes garde-fous que le résumé scientifique ci-dessus (ne jamais
-   inventer une concordance avec la littérature, dire explicitement quand le
-   corpus ne permet pas de conclure). Chat simple, sans historique
-   multi-conversations : une conversation par analyse, non persistée d'une
-   session à l'autre (l'ancien onglet "Assistant IA" séparé, avec historique
-   de conversations sur disque, a été retiré — redondant avec ce chat une
-   fois le résultat déjà disponible dans le même onglet).
+   tableau, courbe, vérification visuelle des contours, puis un **résumé
+   scientifique** généré par mistral 7B + RAG (`generer_resume_stream`, voir
+   "Fiabilité de la génération par LLM" plus bas), avec un bouton **"🔊 Écouter
+   le résumé"** (synthèse vocale du navigateur, Web Speech API — locale, sans
+   dépendance ni connexion, voix française du système quand elle existe).
+
+   Le chat RAG interactif qui figurait sous le résumé (`PROMPT_TEMPLATE`,
+   `repondre_stream`) a été **retiré de l'application** : il mélangeait encore
+   mesures et contexte dans un seul appel LLM, le mode déjà identifié comme fragile
+   ci-dessous. Les fonctions restent dans [chatbot/chatbot.py](chatbot/chatbot.py)
+   mais ne sont plus appelées par `app.py`.
+
+### Piste explorée puis abandonnée : agent Qwen2.5 3B + tool calling
+
+Un agent expérimental (outils : mesures du pipeline, recherche documentaire locale,
+recherche web via Tavily) a brièvement remplacé le chat interactif retiré ci-dessus,
+avant d'être retiré à son tour (2026-09-28). Sur une évaluation réduite (9 scénarios,
+4 passages), le choix d'outil par ce modèle 3B s'est révélé **non déterministe**
+(8/9 à 9/9 selon le passage) et l'agent renvoyait un message **entièrement vide sur
+environ la moitié des passages** pour certaines questions, malgré un correctif
+(retry + repli par mot-clé). Aucune fabrication numérique observée (les mesures
+restaient calculées en Python, jamais par le LLM, même principe que le résumé), mais
+la fiabilité globale du tour de parole restait insuffisante pour un usage réel.
+Remplacé par une fonctionnalité plus simple et fiable (bouton d'écoute ci-dessus)
+plutôt que de continuer à essayer de stabiliser un agent 3B en tool calling.
 
 ### Base documentaire du RAG
 
@@ -524,7 +536,7 @@ par reciprocal rank fusion. Changement de code minimal, aucun coût ni dépendan
   and image sector analysis", 2025). `hybride=True` activé dans `generer_resume_stream`
   uniquement ; `_construire_prompt` (chat interactif, `PROMPT_TEMPLATE`) reste `hybride=False`
   car ce prompt mélange encore mesures et contexte dans un seul appel — le risque d'origine s'y
-  applique toujours tel quel.
+  applique toujours tel quel (ce chat a depuis été retiré de l'application, voir Application).
 
 ### Fiabilité de la génération par LLM
 
@@ -623,7 +635,7 @@ déstabiliser, c'est une lecture du texte déjà généré) — validée par
 [tests/test_chatbot_citations.py](tests/test_chatbot_citations.py) (6 cas, dont le titre
 fabriqué exact observé). Câblée dans `app.py` : un avertissement s'affiche sous les sources
 chaque fois qu'une citation ne correspond à aucune d'elles, pour le résumé de cinétique comme
-pour le chat. Ce n'est qu'un **détecteur** — il rend le problème visible, il ne l'empêche pas.
+pour l'agent expérimental. Ce n'est qu'un **détecteur** — il rend le problème visible, il ne l'empêche pas.
 
 **Citation par position ("le premier article") — corrigée après coup, même principe.** Constaté
 en usage réel (2026-09-10) : bien que `PROMPT_CONTEXTE` interdise explicitement de citer un
@@ -738,8 +750,8 @@ Suite complète : 33/33.
   et sans dépendance réseau pour l'utilisateur courant). Aucun déploiement réel derrière
   cette promotion : voir "Ce qui n'est volontairement pas fait" ci-dessous.
 - **Tests** (`tests/`) : mesures, métriques, ensemble (vote majoritaire, carte de confiance),
-  retrieval, synthèse chatbot, détection de citations fabriquées, régression LLM (Ollama requis,
-  auto-ignorée sinon).
+  retrieval, synthèse chatbot, détection de citations fabriquées, régression LLM et évaluation
+  de l'agent (Ollama requis, auto-ignorées sinon).
 
 ### Ce qui n'est volontairement pas fait
 
@@ -793,9 +805,10 @@ dans l'immédiat.
   génération car elle déstabilisait le résumé LLM — **résolu depuis** (2026-09-10) en isolant la
   section littérature dans son propre appel LLM (voir "Mise en contexte scientifique" et
   "Recherche hybride" ci-dessus) : `hybride=True` est maintenant activé dans
-  `generer_resume_stream`, retesté 3/3 propre. Reste vrai uniquement pour le chat interactif
-  (`_construire_prompt`/`PROMPT_TEMPLATE`), qui mélange encore mesures et contexte dans un seul
-  appel — la même séparation pourrait s'y appliquer, non encore faite. Pistes restantes pour une
+  `generer_resume_stream`, retesté 3/3 propre. Le chat interactif
+  (`_construire_prompt`/`PROMPT_TEMPLATE`), seul endroit où mesures et contexte restaient
+  mélangés dans un seul appel, a été retiré de l'application ; l'agent expérimental applique la
+  même séparation mesures/littérature que le résumé. Pistes restantes pour une
   itération plus poussée : un modèle multilingue plus grand (`multilingual-e5-base`),
   l'augmentation de `n_results` — chacune à valider par le même benchmark de retrieval ET par un
   test d'isolation de génération avant/après, pas par un changement à l'aveugle.

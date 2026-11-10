@@ -77,7 +77,9 @@ def _get_bm25() -> tuple[BM25Okapi, list[dict]]:
     return _bm25_cache
 
 
-def chercher(question: str, n: int = 3, hybride: bool = False) -> list[dict]:
+def chercher(
+    question: str, n: int = 3, hybride: bool = False, categories: list[str] | None = None
+) -> list[dict]:
     """Retourne les n articles les plus pertinents pour la question posée.
 
     hybride=False (par défaut, comportement de production inchangé) : recherche
@@ -91,16 +93,34 @@ def chercher(question: str, n: int = 3, hybride: bool = False) -> list[dict]:
     expérimentale : à valider par `chatbot/evaluate_retrieval.py` avant/après,
     pas encore adoptée par défaut dans chatbot.py.
 
+    categories=None (par défaut, comportement de production inchangé pour tous
+    les appels existants -- generer_resume_stream ne passe jamais ce
+    paramètre) : aucun filtrage, recherche sur tout le corpus. Si fourni
+    (liste de valeurs parmi celles de `category` dans articles_cicatrisation.json,
+    ex: "deep_learning_segmentation"), restreint la recherche aux articles de
+    ces catégories -- ajouté le 2026-09-27 (voir mémoire projet) pour l'agent
+    expérimental, suite à un cas réel où une question sur les "méthodes de
+    segmentation" faisait remonter un article sur le dispositif de création du
+    scratch (catégorie différente, non pertinente pour cette question précise).
+    Si le filtre ne retourne aucun résultat (catégorie mal devinée, ou
+    catégorie trop restreinte), retombe automatiquement sur une recherche non
+    filtrée plutôt que de renvoyer une liste vide.
+
     Chaque résultat: {"titre", "annee", "extrait"}.
     """
     if not hybride:
-        return _chercher_embeddings(question, n)
-    return _chercher_hybride(question, n)
+        resultats = _chercher_embeddings(question, n, categories)
+    else:
+        resultats = _chercher_hybride(question, n, categories)
+    if not resultats and categories:
+        return chercher(question, n=n, hybride=hybride, categories=None)
+    return resultats
 
 
-def _chercher_embeddings(question: str, n: int) -> list[dict]:
+def _chercher_embeddings(question: str, n: int, categories: list[str] | None = None) -> list[dict]:
     collection = get_collection()
-    results = collection.query(query_texts=[question], n_results=n)
+    where = {"category": {"$in": categories}} if categories else None
+    results = collection.query(query_texts=[question], n_results=n, where=where)
     return [
         {"titre": meta["title"], "annee": meta["year"], "extrait": meta["abstract"]}
         for meta in results["metadatas"][0]
@@ -111,14 +131,19 @@ K_PAR_METHODE_HYBRIDE = 10  # profondeur de recherche par méthode avant fusion
 K_RRF = 60  # constante standard de la reciprocal rank fusion (Cormack et al. 2009)
 
 
-def _chercher_hybride(question: str, n: int) -> list[dict]:
+def _chercher_hybride(question: str, n: int, categories: list[str] | None = None) -> list[dict]:
     collection = get_collection()
-    resultats_embeddings = collection.query(query_texts=[question], n_results=K_PAR_METHODE_HYBRIDE)
+    where = {"category": {"$in": categories}} if categories else None
+    resultats_embeddings = collection.query(
+        query_texts=[question], n_results=K_PAR_METHODE_HYBRIDE, where=where
+    )
     titres_embeddings = [meta["title"] for meta in resultats_embeddings["metadatas"][0]]
 
     bm25, articles = _get_bm25()
     scores_bm25 = bm25.get_scores(_tokenize(question))
     ordre_bm25 = sorted(range(len(articles)), key=lambda i: scores_bm25[i], reverse=True)
+    if categories:
+        ordre_bm25 = [i for i in ordre_bm25 if (articles[i].get("category") or "non_categorise") in categories]
     titres_bm25 = [articles[i]["title"] for i in ordre_bm25[:K_PAR_METHODE_HYBRIDE]]
 
     rrf_scores: dict[str, float] = {}

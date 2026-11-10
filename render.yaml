@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: wound-healing-ai
+    runtime: docker
+    plan: standard        # 2 Go de RAM : torch + modèle ; "starter" (512 Mo) est trop juste
+    healthCheckPath: /_stcore/health
+    envVars:
+      - key: MODEL_URLS   # URL(s) des .pt dans une GitHub Release, séparées par des virgules
+        sync: false

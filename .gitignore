@@ -27,6 +27,9 @@ data/masques/
 data/masks_binary/
 
 .streamlit/secrets.toml
+.env
 
 # Config locale de l'outil Claude Code, pas du projet
 .claude/
+
+.venv/
